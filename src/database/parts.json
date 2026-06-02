@@ -1,0 +1,90 @@
+{
+  "frames": [
+    {
+      "id": "f450",
+      "name": "DJI F450",
+      "mass": 0.28,
+      "wheelbase": 450,
+      "inertiaMatrix": [[0.008, 0, 0], [0, 0.008, 0], [0, 0, 0.015]],
+      "propPositions": [[0.159, 0.159, 0], [-0.159, 0.159, 0], [-0.159, -0.159, 0], [0.159, -0.159, 0]],
+      "propDirections": [[0, 0, -1], [0, 0, -1], [0, 0, -1], [0, 0, -1]],
+      "torqueSigns": [-1, 1, -1, 1],
+      "aeroRefArea": 0.02,
+      "aeroRefSpan": 0.45,
+      "aeroRefChord": 0.1,
+      "dragCoeffs": { "cdx": 0.3, "cdy": 0.3, "cdz": 0.5 }
+    }
+  ],
+  "motors": [
+    {
+      "id": "2212-920",
+      "name": "2212 920KV",
+      "mass": 0.052,
+      "kv": 920,
+      "resistance": 0.08,
+      "backEmfCoeff": 0.0105,
+      "torqueCoeff": 0.0105,
+      "rotorInertia": 1e-5,
+      "viscousDamping": 1e-6,
+      "noLoadCurrent": 0.5
+    },
+    {
+      "id": "2212-1000",
+      "name": "2212 1000KV",
+      "mass": 0.055,
+      "kv": 1000,
+      "resistance": 0.075,
+      "backEmfCoeff": 0.00955,
+      "torqueCoeff": 0.00955,
+      "rotorInertia": 1e-5,
+      "viscousDamping": 1e-6,
+      "noLoadCurrent": 0.6
+    }
+  ],
+  "propellers": [
+    {
+      "id": "9450",
+      "name": "9450 (9x4.5)",
+      "mass": 0.008,
+      "diameter": 0.2286,
+      "thrustCurve": [[0, 0.11], [0.1, 0.108], [0.2, 0.105], [0.3, 0.10], [0.4, 0.095], [0.5, 0.088], [0.6, 0.08], [0.7, 0.07], [0.8, 0.058], [0.9, 0.045], [1.0, 0.03]],
+      "torqueCurve": [[0, 0.015], [0.1, 0.0148], [0.2, 0.0145], [0.3, 0.014], [0.4, 0.0135], [0.5, 0.0128], [0.6, 0.012], [0.7, 0.011], [0.8, 0.0095], [0.9, 0.008], [1.0, 0.006]],
+      "torqueThrustRatio": 0.025
+    },
+    {
+      "id": "1045",
+      "name": "1045 (10x4.5)",
+      "mass": 0.012,
+      "diameter": 0.254,
+      "thrustCurve": [[0, 0.12], [0.1, 0.118], [0.2, 0.115], [0.3, 0.11], [0.4, 0.104], [0.5, 0.096], [0.6, 0.087], [0.7, 0.076], [0.8, 0.063], [0.9, 0.048], [1.0, 0.032]],
+      "torqueCurve": [[0, 0.018], [0.1, 0.0177], [0.2, 0.0173], [0.3, 0.0167], [0.4, 0.016], [0.5, 0.015], [0.6, 0.014], [0.7, 0.012], [0.8, 0.01], [0.9, 0.008], [1.0, 0.006]],
+      "torqueThrustRatio": 0.028
+    }
+  ],
+  "batteryCells": [
+    {
+      "id": "lipo-3.7",
+      "name": "LiPo 3.7V",
+      "type": "LiPo",
+      "ocvCoeffs": [3.0, 3.5, -2.0, 1.0],
+      "internalResistance": 0.002,
+      "maxDischargeRate": 25
+    }
+  ],
+  "escs": [
+    {
+      "id": "esc-30a",
+      "name": "30A ESC",
+      "mass": 0.025,
+      "maxCurrent": 30,
+      "resistance": 0.003
+    },
+    {
+      "id": "esc-40a",
+      "name": "40A ESC",
+      "mass": 0.03,
+      "maxCurrent": 40,
+      "resistance": 0.002
+    }
+  ]
+}
