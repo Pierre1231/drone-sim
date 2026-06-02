@@ -1,73 +1,95 @@
-# React + TypeScript + Vite
+# 四旋翼无人机参数选型与飞行仿真平台
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+基于完整六自由度动力学模型的无人机性能仿真网页应用。
 
-Currently, two official plugins are available:
+## 技术栈
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **React 19 + TypeScript + Vite** — 前端框架
+- **Tailwind CSS 4 + shadcn/ui** — UI 样式
+- **Three.js + React Three Fiber** — 3D 可视化
+- **ECharts** — 数据图表
+- **Zustand** — 状态管理
+- **Web Worker** — 后台仿真计算
 
-## React Compiler
+## 核心功能
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. 部件选型
+- 从型号库中选择机架、电机、螺旋桨、电池（电芯级）、电调
+- 实时显示悬停时间/电流估算
+- 电芯级电池配置（串数/容量/C率/内阻/重量）
 
-## Expanding the ESLint configuration
+### 2. 飞行仿真
+- **悬停续航测试**：起飞→悬停→电量耗尽→自动降落
+- **8字机动续航测试**：起飞→悬停→8字航线→电量耗尽→降落
+- 完整六自由度动力学（10kHz 步长）
+- 包含：电池动态、电机电气暂态、螺旋桨推进比效应、气动力、标准大气
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 3. 3D 回放
+- 时间序列驱动的飞行动画
+- 播放/暂停/进度条拖拽/倍速控制
+- DJI 风格 HUD（时间/高度/电压/电量）
+- 飞行轨迹线显示
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 4. 数据展示
+- **汇总报告**：飞行时间/距离/功率/高度/速度/电量
+- **图表**：电压/高度/功率/推力曲线
+- **仪表盘**：条形图概览 + 悬停/最大油门对比表
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### 5. 控制器自动设计
+- 根据无人机物理参数自动计算串级 PID 增益
+- 带宽分配：角速度 > 姿态 > 速度 > 位置
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 快速开始
+
+```bash
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+
+# 运行测试
+npm test
+
+# 构建生产版本
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 项目结构
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+src/
+├── components/
+│   ├── ConfigPanel.tsx      # 配置页 UI
+│   ├── PlaybackPanel.tsx    # 3D 回放 + HUD
+│   ├── DataPanel.tsx        # 数据图表 + 仪表盘
+│   └── InfoPanel.tsx        # 原理说明
+├── lib/
+│   ├── estimation.ts        # 悬停性能估算
+│   ├── dynamics.ts          # 六自由度积分器
+│   ├── components.ts        # 电池/电机/电调模型
+│   ├── propulsion.ts        # 螺旋桨/控制分配/PID
+│   ├── aerodynamics.ts      # 标准大气/气动力
+│   ├── mission.ts           # 飞行任务脚本
+│   ├── controllerDesign.ts  # 控制器自动设计
+│   ├── simulation.ts        # 仿真引擎串联
+│   └── database.ts          # 部件数据库加载器
+├── store/
+│   ├── configStore.ts       # 配置状态
+│   └── simStore.ts          # 仿真状态
+├── types/
+│   └── parts.ts             # 部件类型定义
+├── database/
+│   └── parts.json           # 部件数据
+├── workers/
+│   └── simulation.worker.ts # Web Worker
+└── App.tsx                  # 主页面
+```
+
+## 数学模型
+
+详细动力学模型见项目根目录 `拦截器数学模型.md`。
+
+## 许可证
+
+MIT
