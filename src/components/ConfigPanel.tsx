@@ -1,10 +1,14 @@
 import { useConfigStore } from '@/store/configStore'
-import { getFrames, getMotors, getPropellers, getBatteryCells, getESCs } from '@/lib/database'
+import { useSimStore } from '@/store/simStore'
+import { getFrames, getMotors, getPropellers, getBatteryCells, getESCs, getFrameById, getMotorById, getPropellerById, getBatteryCellById, getESCById } from '@/lib/database'
 import { estimateHoverPerformance } from '@/lib/estimation'
-import { Gauge, Wind, Cpu, Fan, Battery, Shield } from 'lucide-react'
+import type { SimConfig } from '@/lib/simulation'
+import { Gauge, Wind, Cpu, Fan, Battery, Shield, Play, Square } from 'lucide-react'
 
 export default function ConfigPanel() {
   const { config, setConfig } = useConfigStore()
+  const { status, progress, setStatus, setProgress, setResult, setError, reset } = useSimStore()
+  const workerRef = useRef<Worker | null>(null)
 
   const frames = getFrames()
   const motors = getMotors()
@@ -133,11 +137,112 @@ export default function ConfigPanel() {
           </p>
         </div>
       )}
+
+      {/* Simulation control */}
+      <div className="flex items-center gap-3 pt-2">
+        {status === 'running' ? (
+          <>
+            <button
+              onClick={cancelSimulation}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium"
+            >
+              <Square size={16} /> 取消
+            </button>
+            <div className="flex-1">
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${progress * 100}%` }} />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{(progress * 100).toFixed(0)}%</p>
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={startSimulation}
+            disabled={!config.motorId || !config.propellerId}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            <Play size={16} /> 开始仿真
+          </button>
+        )}
+      </div>
     </div>
   )
+
+  function startSimulation() {
+    if (!config.motorId || !config.propellerId) return
+
+    const frame = getFrameById(config.frameId)
+    const motor = getMotorById(config.motorId)
+    const prop = getPropellerById(config.propellerId)
+    const cell = getBatteryCellById(config.batteryCellId)
+    const esc = getESCById(config.escId)
+
+    if (!motor || !prop) return
+
+    reset()
+    setStatus('running')
+
+    const simConfig: SimConfig = {
+      missionType: 'hover',
+      droneConfig: config,
+      frameMass: frame?.mass ?? 0.28,
+      motorParams: {
+        resistance: motor.resistance,
+        backEmfCoeff: motor.backEmfCoeff,
+        torqueCoeff: motor.torqueCoeff,
+        rotorInertia: motor.rotorInertia,
+        viscousDamping: motor.viscousDamping,
+      },
+      propParams: {
+        diameter: prop.diameter,
+        thrustCurve: prop.thrustCurve,
+        torqueCurve: prop.torqueCurve,
+        torqueThrustRatio: prop.torqueThrustRatio,
+      },
+      batteryParams: {
+        cells: config.batteryCells,
+        capacityAh: config.batteryCapacity / 1000,
+        ocvCoeffs: cell?.ocvCoeffs ?? [3.0, 3.5, -2.0, 1.0],
+        internalResistance: (cell?.internalResistance ?? 0.002) * config.batteryCells + config.batteryInternalResistance / 1000,
+      },
+      escParams: {
+        maxCurrent: esc?.maxCurrent ?? 30,
+        resistance: esc?.resistance ?? 0.003,
+      },
+      inertia: frame?.inertiaMatrix.map(row => row.reduce((a, b) => a + b, 0) / 3) as [number, number, number] ?? [0.008, 0.008, 0.015],
+      armLength: (frame?.wheelbase ?? 450) / 1000 / Math.sqrt(2),
+    }
+
+    const worker = new Worker(new URL('@/workers/simulation.worker.ts', import.meta.url), { type: 'module' })
+    workerRef.current = worker
+
+    worker.onmessage = (e) => {
+      const { type, progress, result, error } = e.data
+      if (type === 'progress') {
+        setProgress(progress.progress)
+      } else if (type === 'complete') {
+        setResult(result)
+        worker.terminate()
+      } else if (type === 'error') {
+        setError(error)
+        worker.terminate()
+      }
+    }
+
+    worker.postMessage({ type: 'start', config: simConfig })
+  }
+
+  function cancelSimulation() {
+    if (workerRef.current) {
+      workerRef.current.postMessage({ type: 'cancel' })
+      workerRef.current.terminate()
+      workerRef.current = null
+    }
+    reset()
+  }
 }
 
-import React from 'react'
+import React, { useRef } from 'react'
 
 function ConfigGroup({ icon, title, color, children }: { icon: React.ReactNode; title: string; color: string; children: React.ReactNode }) {
   return (
