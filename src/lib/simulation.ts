@@ -60,7 +60,7 @@ export function runSimulation(
 
   // Controller gains
   const gains = designController({
-    mass: config.frameMass + config.droneConfig.totalWeight,
+    mass: config.droneConfig.totalWeight,
     inertia: config.inertia,
     maxThrustPerMotor: 15,
     motorTimeConstant: config.motorParams.rotorInertia / Math.max(config.motorParams.viscousDamping, 1e-8),
@@ -103,7 +103,7 @@ export function runSimulation(
     refPosition: [],
   }
 
-  const totalMass = config.frameMass + config.droneConfig.totalWeight
+  const totalMass = config.droneConfig.totalWeight
   const G = 9.81
 
   while (simTime < maxSimTime) {
