@@ -1,6 +1,8 @@
 import { useConfigStore } from '@/store/configStore'
 import { useSimStore } from '@/store/simStore'
 import { getFrames, getMotors, getPropellers, getBatteryCells, getESCs, getFrameById, getMotorById, getPropellerById, getBatteryCellById, getESCById } from '@/lib/database'
+import { getDronePresets, getPresetById } from '@/lib/presets'
+import { Package } from 'lucide-react'
 import { estimateHoverPerformance } from '@/lib/estimation'
 import type { SimConfig } from '@/lib/simulation'
 import { Play, Square, Wind, Shield, Cpu, Fan, Battery, Gauge } from 'lucide-react'
@@ -16,6 +18,7 @@ export default function ConfigPanel() {
   const propellers = getPropellers()
   const batteryCells = getBatteryCells()
   const escs = getESCs()
+  const presets = getDronePresets()
 
   // Real-time estimation
   const estimation = (() => {
@@ -50,6 +53,38 @@ export default function ConfigPanel() {
           <p style={{ fontSize: 16, color: 'var(--text-secondary)', maxWidth: 600 }}>
             从型号库中选择部件，组装完整无人机配置
           </p>
+        </div>
+
+        {/* Preset Selector */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
+          padding: 'var(--space-5)', background: 'var(--accent-subtle)',
+          borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-8)',
+          border: '1px solid var(--accent-primary)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexShrink: 0 }}>
+            <Package size={18} style={{ color: 'var(--accent-primary)' }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent-primary)' }}>加载预设配置</span>
+          </div>
+          <select
+            value=""
+            onChange={e => {
+              const preset = getPresetById(e.target.value)
+              if (preset) setConfig(preset.config)
+            }}
+            style={{
+              padding: 'var(--space-3) var(--space-4)', border: '1px solid var(--accent-primary)',
+              borderRadius: 'var(--radius-md)', fontSize: 14, background: 'var(--bg-surface)',
+              color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'var(--font-body)',
+              outline: 'none', minWidth: 200,
+            }}
+          >
+            <option value="">选择整机预设...</option>
+            {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            快速加载预设整机，之后仍可自由修改每个部件
+          </span>
         </div>
 
         {/* Environment Parameters */}
