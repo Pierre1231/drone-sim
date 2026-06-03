@@ -159,7 +159,7 @@ export class PIDController {
     // Proportional
     const P = this.kp * error
 
-    // Integral
+    // Integral with anti-windup (conditional integration)
     this.integral += error * dt
     const I = this.ki * this.integral
 
@@ -172,9 +172,15 @@ export class PIDController {
 
     // Output with saturation
     let output = P + I + D
-    output = Math.max(this.outputMin, Math.min(this.outputMax, output))
+    const clampedOutput = Math.max(this.outputMin, Math.min(this.outputMax, output))
 
-    return output
+    // Anti-windup: only integrate if not saturated
+    if (output !== clampedOutput && this.ki > 0) {
+      // Back-calculate the integral that would give the saturated output
+      this.integral = (clampedOutput - P - D) / this.ki
+    }
+
+    return clampedOutput
   }
 
   reset(): void {

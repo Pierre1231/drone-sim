@@ -28,6 +28,9 @@ export interface DroneConfig {
   // Safety
   maxThrottlePercent: number
   lowVoltageThreshold: number
+
+  // Mission
+  missionType: 'hover' | 'circle' | 'figure8'
 }
 
 export const defaultConfig: DroneConfig = {
@@ -52,6 +55,8 @@ export const defaultConfig: DroneConfig = {
 
   maxThrottlePercent: 80,
   lowVoltageThreshold: 14.0,
+
+  missionType: 'hover',
 }
 
 interface ConfigStore {

@@ -40,7 +40,7 @@ function quatToRotationMatrix(q: [number, number, number, number]): number[][] {
 }
 
 /** Rotate a vector from body frame to NED */
-function rotateBodyToNed(
+export function rotateBodyToNed(
   v: [number, number, number],
   q: [number, number, number, number]
 ): [number, number, number] {
@@ -49,6 +49,20 @@ function rotateBodyToNed(
     R[0][0]*v[0] + R[0][1]*v[1] + R[0][2]*v[2],
     R[1][0]*v[0] + R[1][1]*v[1] + R[1][2]*v[2],
     R[2][0]*v[0] + R[2][1]*v[1] + R[2][2]*v[2],
+  ]
+}
+
+/** Rotate a vector from NED to body frame (inverse of body→NED) */
+export function rotateNedToBody(
+  v: [number, number, number],
+  q: [number, number, number, number]
+): [number, number, number] {
+  const R = quatToRotationMatrix(q)
+  // Use transpose of rotation matrix (orthonormal, so inverse = transpose)
+  return [
+    R[0][0]*v[0] + R[1][0]*v[1] + R[2][0]*v[2],
+    R[0][1]*v[0] + R[1][1]*v[1] + R[2][1]*v[2],
+    R[0][2]*v[0] + R[1][2]*v[1] + R[2][2]*v[2],
   ]
 }
 
@@ -72,6 +86,29 @@ function quatNormalize(q: [number, number, number, number]): [number, number, nu
   const norm = Math.sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
   if (norm < 1e-10) return [1, 0, 0, 0]
   return [q[0]/norm, q[1]/norm, q[2]/norm, q[3]/norm]
+}
+
+/** Quaternion to Euler angles (roll, pitch, yaw) in radians, NED convention */
+export function quatToEuler(q: [number, number, number, number]): [number, number, number] {
+  const [w, x, y, z] = q
+
+  // Roll (x-axis rotation)
+  const sinr_cosp = 2 * (w * x + y * z)
+  const cosr_cosp = 1 - 2 * (x * x + y * y)
+  const roll = Math.atan2(sinr_cosp, cosr_cosp)
+
+  // Pitch (y-axis rotation)
+  const sinp = 2 * (w * y - z * x)
+  const pitch = Math.abs(sinp) >= 1
+    ? (sinp > 0 ? Math.PI / 2 : -Math.PI / 2)
+    : Math.asin(sinp)
+
+  // Yaw (z-axis rotation)
+  const siny_cosp = 2 * (w * z + x * y)
+  const cosy_cosp = 1 - 2 * (y * y + z * z)
+  const yaw = Math.atan2(siny_cosp, cosy_cosp)
+
+  return [roll, pitch, yaw]
 }
 
 /** Vector cross product */

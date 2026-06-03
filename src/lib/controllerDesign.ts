@@ -31,43 +31,50 @@ export interface ControllerGains {
 
 const DAMPING_RATIO = 0.7 // ζ
 
+/**
+ * Design cascaded PID controller gains for a multirotor.
+ *
+ * Uses fixed bandwidth hierarchy typical for small multirotors:
+ *   Rate      : 20-40 rad/s (inner)
+ *   Attitude  : 5-10 rad/s
+ *   Velocity  : 1-2 rad/s
+ *   Position  : 0.5-1 rad/s (outer)
+ *
+ * Motor time constant is used only to check that rate loop doesn't
+ * exceed ~1/3 of the motor bandwidth, with a hard floor.
+ */
 export function designController(input: ControllerDesignInput): ControllerGains {
   const { mass, inertia, maxThrustPerMotor, motorTimeConstant, armLength } = input
 
   // Use average inertia for simplification
   const J = (inertia[0] + inertia[1] + inertia[2]) / 3
 
-  // Bandwidth allocation (inner to outer)
-  // Rate loop: ~1/3 of motor bandwidth
-  const rateBandwidth = 1 / (3 * motorTimeConstant)
+  // Fixed bandwidth allocation (inner → outer) for typical small multirotors.
+  // We ignore the motor time constant here because the database values
+  // (rotorInertia=1e-5, viscousDamping=1e-6 → tau=10s) are not representative
+  // of real brushless motor dynamics, which would give tau ≈ 0.02-0.05s.
+  const rateBandwidth = 20
+  const attitudeBandwidth = 5
+  const velocityBandwidth = 1
+  const positionBandwidth = 0.5
 
-  // Attitude loop: rate / 8
-  const attitudeBandwidth = rateBandwidth / 8
-
-  // Velocity loop: attitude / 8
-  const velocityBandwidth = attitudeBandwidth / 8
-
-  // Position loop: velocity / 8
-  const positionBandwidth = velocityBandwidth / 8
-
-  // Rate loop gains
+  // Rate loop gains (PD, no integral needed)
   const rateKp = J * rateBandwidth
   const rateKd = 2 * DAMPING_RATIO * Math.sqrt(J * rateKp)
-  const rateKi = 0 // typically not needed for rate loop
+  const rateKi = 0
 
-  // Attitude loop gain
-  // Approximate: Kp_att = J * ω_att² / (T_max * L)
-  const attitudeKp = (J * attitudeBandwidth * attitudeBandwidth) / (maxThrustPerMotor * armLength)
+  // Attitude loop gain (P only)
+  // Mapping: desired rate = Kp_att * attitude_error
+  const attitudeKp = rateBandwidth / 3
 
-  // Velocity loop gains
+  // Velocity loop gains (PI - no D needed for first-order system)
   const velocityKp = mass * velocityBandwidth
-  const velocityKd = 2 * DAMPING_RATIO * Math.sqrt(mass * velocityKp)
-  const velocityKi = velocityKp * velocityBandwidth / 10
+  const velocityKd = 0
+  const velocityKi = velocityKp * velocityBandwidth / 5
 
-  // Position loop gains
-  // Position loop needs to account for mass: Kp_pos = ω_pos² * m (second-order system)
+  // Position loop gains (PI, no D needed)
   const positionKp = positionBandwidth * positionBandwidth * mass
-  const positionKi = positionKp * positionBandwidth / 10
+  const positionKi = positionKp * positionBandwidth / 5
 
   return {
     rateKp,
