@@ -18,7 +18,7 @@ function DroneModel({ position, quaternion }: { position: [number, number, numbe
     <group ref={groupRef}>
       <mesh>
         <boxGeometry args={[0.1, 0.05, 0.15]} />
-        <meshStandardMaterial color="#334155" />
+        <meshStandardMaterial color="#0f172a" />
       </mesh>
       {[[0.15, 0.15], [-0.15, 0.15], [-0.15, -0.15], [0.15, -0.15]].map(([x, z], i) => (
         <mesh key={i} position={[x, 0.03, z]}>
@@ -109,10 +109,10 @@ export default function PlaybackPanel() {
     return (
       <div style={{
         width: '100%', height: 500,
-        background: 'linear-gradient(180deg, oklch(18% 0.02 240) 0%, oklch(12% 0.02 240) 100%)',
+        background: 'linear-gradient(180deg, oklch(96% 0.005 250) 0%, oklch(92% 0.01 250) 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <div style={{ textAlign: 'center', color: 'oklch(50% 0.02 240)' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: 'var(--space-4)', opacity: 0.5 }}>
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
             <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
@@ -129,12 +129,12 @@ export default function PlaybackPanel() {
     return (
       <div style={{
         width: '100%', height: 500,
-        background: 'linear-gradient(180deg, oklch(18% 0.02 240) 0%, oklch(12% 0.02 240) 100%)',
+        background: 'linear-gradient(180deg, oklch(96% 0.005 250) 0%, oklch(92% 0.01 250) 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <div style={{ textAlign: 'center', color: 'oklch(50% 0.02 240)' }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
           <div style={{
-            width: 48, height: 48, border: '3px solid oklch(30% 0.02 240)',
+            width: 48, height: 48, border: '3px solid var(--border-default)',
             borderTopColor: 'var(--accent-primary)', borderRadius: '50%',
             animation: 'spin 1s linear infinite', margin: '0 auto var(--space-4)',
           }} />
@@ -149,9 +149,9 @@ export default function PlaybackPanel() {
     return (
       <div style={{
         width: '100%', height: 500,
-        background: 'linear-gradient(180deg, oklch(18% 0.02 240) 0%, oklch(12% 0.02 240) 100%)',
+        background: 'linear-gradient(180deg, oklch(96% 0.005 250) 0%, oklch(92% 0.01 250) 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'oklch(50% 0.02 240)',
+        color: 'var(--text-secondary)',
       }}>
         <p>无仿真结果</p>
       </div>
@@ -170,7 +170,7 @@ export default function PlaybackPanel() {
         <Canvas camera={{ position: [8, 8, 8], fov: 50 }} style={{ background: 'linear-gradient(180deg, oklch(18% 0.02 240) 0%, oklch(12% 0.02 240) 100%)' }}>
           <ambientLight intensity={0.5} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
-          <Grid args={[40, 40]} cellSize={1} cellThickness={0.3} cellColor="#475569" />
+          <Grid args={[40, 40]} cellSize={1} cellThickness={0.5} cellColor="#94a3b8" />
           <DroneModel position={pos} quaternion={quat} />
           {/* Actual trajectory (blue) */}
           <TrajectoryLine positions={result.position} />
@@ -196,16 +196,16 @@ export default function PlaybackPanel() {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
         padding: 'var(--space-4) var(--space-6)',
-        background: 'oklch(18% 0.02 240)',
-        borderTop: '1px solid oklch(25% 0.02 240)',
+        background: 'oklch(98% 0.005 250)',
+        borderTop: '1px solid var(--border-default)',
       }}
       >
         <button onClick={() => setCurrentFrame(0)} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent', color: 'white', border: 'none', borderRadius: '50%',
+          background: 'transparent', color: 'var(--text-primary)', border: 'none', borderRadius: '50%',
           cursor: 'pointer', transition: 'all 0.15s ease',
         }}
-          onMouseEnter={e => e.currentTarget.style.background = 'oklch(30% 0.02 240)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'oklch(92% 0.01 250)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
           <SkipBack size={18} />
@@ -225,10 +225,10 @@ export default function PlaybackPanel() {
 
         <button onClick={() => setCurrentFrame(totalFrames - 1)} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent', color: 'white', border: 'none', borderRadius: '50%',
+          background: 'transparent', color: 'var(--text-primary)', border: 'none', borderRadius: '50%',
           cursor: 'pointer', transition: 'all 0.15s ease',
         }}
-          onMouseEnter={e => e.currentTarget.style.background = 'oklch(30% 0.02 240)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'oklch(92% 0.01 250)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
           <SkipForward size={18} />
@@ -245,7 +245,7 @@ export default function PlaybackPanel() {
 
         <span style={{
           fontFamily: 'var(--font-mono)', fontSize: 13,
-          color: 'oklch(70% 0.02 240)', whiteSpace: 'nowrap',
+          color: 'var(--text-secondary)', whiteSpace: 'nowrap',
         }}>
           {formatTime(timeSec)} / {formatTime(totalTime)}
         </span>
@@ -254,15 +254,15 @@ export default function PlaybackPanel() {
           {[0.5, 1, 2, 4].map(speed => (
             <button key={speed} onClick={() => setPlaybackSpeed(speed)} style={{
               padding: 'var(--space-2) var(--space-3)', background: 'transparent',
-              border: '1px solid oklch(30% 0.02 240)',
-              color: playbackSpeed === speed ? 'var(--text-inverse)' : 'oklch(60% 0.02 240)',
+              border: '1px solid var(--border-default)',
+              color: playbackSpeed === speed ? 'var(--text-inverse)' : 'var(--text-secondary)',
               fontSize: 12, fontWeight: 500, borderRadius: 'var(--radius-sm)',
               cursor: 'pointer', transition: 'all 0.15s ease', fontFamily: 'var(--font-body)',
               backgroundColor: playbackSpeed === speed ? 'var(--accent-primary)' : 'transparent',
-              borderColor: playbackSpeed === speed ? 'var(--accent-primary)' : 'oklch(30% 0.02 240)',
+              borderColor: playbackSpeed === speed ? 'var(--accent-primary)' : 'var(--border-default)',
             }}
-              onMouseEnter={e => { if (playbackSpeed !== speed) { e.currentTarget.style.borderColor = 'oklch(50% 0.02 240)'; e.currentTarget.style.color = 'oklch(80% 0.02 240)' }}}
-              onMouseLeave={e => { if (playbackSpeed !== speed) { e.currentTarget.style.borderColor = 'oklch(30% 0.02 240)'; e.currentTarget.style.color = 'oklch(60% 0.02 240)' }}}
+              onMouseEnter={e => { if (playbackSpeed !== speed) { e.currentTarget.style.borderColor = 'oklch(70% 0.01 250)'; e.currentTarget.style.color = 'var(--text-primary)' }}}
+              onMouseLeave={e => { if (playbackSpeed !== speed) { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-secondary)' }}}
             >
               {speed}x
             </button>
