@@ -1,5 +1,5 @@
 import { useSimStore } from '@/store/simStore'
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 
 export default function DataPanel() {
@@ -21,7 +21,6 @@ export default function DataPanel() {
   const lastIdx = result.time.length - 1
   const flightTime = result.time[lastIdx]
   const maxAlt = Math.max(...result.position.map(p => -p[2]))
-  const minVoltage = Math.min(...result.voltage)
   const finalSoc = result.soc[lastIdx]
   const avgPower = result.power.reduce((a, b) => a + b, 0) / result.power.length
   const maxSpeed = Math.max(...result.velocity.map(v => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)))

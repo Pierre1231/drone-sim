@@ -230,6 +230,7 @@ export default function ConfigPanel() {
       frameMass: frame?.mass ?? 0.28,
       motorParams: {
         resistance: motor.resistance,
+        kv: motor.kv,
         backEmfCoeff: motor.backEmfCoeff,
         torqueCoeff: motor.torqueCoeff,
         rotorInertia: motor.rotorInertia,

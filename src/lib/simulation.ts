@@ -1,5 +1,5 @@
 import { integrate, createState, quatToEuler, rotateNedToBody, type ForcesAndMoments } from './dynamics'
-import { BatteryModel, MotorModel, ESCModel } from './components'
+import { BatteryModel, MotorModel } from './components'
 import { PropellerModel, ControlAllocator, PIDController } from './propulsion'
 import { StandardAtmosphere, LowSpeedDrag } from './aerodynamics'
 import { HoverMission, CircleMission, Figure8Mission } from './mission'
@@ -10,7 +10,7 @@ export interface SimConfig {
   missionType: 'hover' | 'circle' | 'figure8'
   droneConfig: DroneConfig
   frameMass: number
-  motorParams: { resistance: number; backEmfCoeff: number; torqueCoeff: number; rotorInertia: number; viscousDamping: number }
+  motorParams: { resistance: number; kv: number; backEmfCoeff: number; torqueCoeff: number; rotorInertia: number; viscousDamping: number }
   propParams: { diameter: number; thrustCurve: [number, number][]; torqueCurve: [number, number][]; torqueThrustRatio: number }
   batteryParams: { cells: number; capacityAh: number; ocvCoeffs: [number, number, number, number]; internalResistance: number }
   escParams: { maxCurrent: number; resistance: number }
@@ -53,10 +53,6 @@ export function runSimulation(
   // Models
   const battery = new BatteryModel(config.batteryParams)
   const motors = Array.from({ length: 4 }, () => new MotorModel(config.motorParams))
-  const escs = Array.from({ length: 4 }, () => new ESCModel({
-    minSpeed: 0,
-    maxSpeedAtNominalVoltage: config.motorParams.backEmfCoeff > 0 ? 14.8 / config.motorParams.backEmfCoeff : 10000
-  }))
   const prop = new PropellerModel(config.propParams)
   const allocator = new ControlAllocator({ armLength: config.armLength })
   const atm = new StandardAtmosphere()

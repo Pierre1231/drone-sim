@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { integrate, createState, type DroneState, type ForcesAndMoments } from './dynamics'
+import { integrate, createState, type ForcesAndMoments } from './dynamics'
 
 describe('dynamics', () => {
   const dt = 0.001 // 1ms step

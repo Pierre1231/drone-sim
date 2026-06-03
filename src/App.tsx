@@ -2,7 +2,6 @@ import ConfigPanel from '@/components/ConfigPanel'
 import PlaybackPanel from '@/components/PlaybackPanel'
 import DataPanel from '@/components/DataPanel'
 import InfoPanel from '@/components/InfoPanel'
-import { useSimStore } from '@/store/simStore'
 import { ChevronDown } from 'lucide-react'
 
 function App() {

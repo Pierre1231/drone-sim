@@ -20,7 +20,7 @@ export interface DynamicsParams {
 
 const G = 9.81  // gravity (m/s²), downward in NED
 
-export function createState(params: { mass: number }): DroneState {
+export function createState(_params: { mass: number }): DroneState {
   return {
     position: [0, 0, 0],
     velocity: [0, 0, 0],

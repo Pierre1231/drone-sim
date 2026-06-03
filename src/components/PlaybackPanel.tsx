@@ -39,9 +39,7 @@ function TrajectoryLine({ positions, color = '#3b82f6' }: { positions: number[][
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={points.length}
-          array={new Float32Array(points.flat())}
-          itemSize={3}
+          args={[new Float32Array(points.flat()), 3]}
         />
       </bufferGeometry>
       <lineBasicMaterial color={color} transparent opacity={0.5} />
@@ -59,9 +57,7 @@ function RefTrajectoryLine({ positions }: { positions: number[][] }) {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={points.length}
-          array={new Float32Array(points.flat())}
-          itemSize={3}
+          args={[new Float32Array(points.flat()), 3]}
         />
       </bufferGeometry>
       <lineDashedMaterial color="#f59e0b" dashSize={0.3} gapSize={0.2} transparent opacity={0.6} />

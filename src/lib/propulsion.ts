@@ -33,13 +33,11 @@ export class PropellerModel {
   private diameter: number
   private thrustCurve: [number, number][]
   private torqueCurve: [number, number][]
-  private torqueThrustRatio: number
 
   constructor(params: PropellerParams) {
     this.diameter = params.diameter
     this.thrustCurve = params.thrustCurve
     this.torqueCurve = params.torqueCurve
-    this.torqueThrustRatio = params.torqueThrustRatio
   }
 
   /** Compute thrust, torque, and power given advance velocity (m/s) and angular speed (rad/s) */
@@ -70,27 +68,10 @@ export interface ControlAllocatorParams {
 
 export class ControlAllocator {
   private armLength: number
-  private allocationMatrix: number[][]
   private inverseMatrix: number[][]
 
   constructor(params: ControlAllocatorParams) {
     this.armLength = params.armLength
-    const L = params.armLength
-    const kappa = 0.025 // torque-thrust ratio (default)
-
-    // X-configuration allocation matrix
-    // [T]   [ 1   1   1   1 ] [T1]
-    // [Mx]  [ L  -L  -L   L ] [T2]
-    // [My]  [ L   L  -L  -L ] [T3]
-    // [Mz]  [ κ  -κ   κ  -κ ] [T4]
-    this.allocationMatrix = [
-      [1, 1, 1, 1],
-      [L, -L, -L, L],
-      [L, L, -L, -L],
-      [kappa, -kappa, kappa, -kappa],
-    ]
-
-    // Compute inverse using simple method for this specific matrix
     this.inverseMatrix = this.computeInverse()
   }
 

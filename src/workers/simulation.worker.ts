@@ -1,4 +1,4 @@
-import { runSimulation, type SimConfig, type SimResult, type SimProgress } from '@/lib/simulation'
+import { runSimulation, type SimConfig, type SimProgress } from '@/lib/simulation'
 
 let cancelled = false
 

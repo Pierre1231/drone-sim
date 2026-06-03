@@ -44,7 +44,7 @@ const DAMPING_RATIO = 0.7 // ζ
  * exceed ~1/3 of the motor bandwidth, with a hard floor.
  */
 export function designController(input: ControllerDesignInput): ControllerGains {
-  const { mass, inertia, maxThrustPerMotor, motorTimeConstant, armLength } = input
+  const { mass, inertia } = input
 
   // Use average inertia for simplification
   const J = (inertia[0] + inertia[1] + inertia[2]) / 3
