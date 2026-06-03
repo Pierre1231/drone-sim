@@ -109,7 +109,7 @@ export default function PlaybackPanel() {
     return (
       <div style={{
         width: '100%', height: 500,
-        background: 'linear-gradient(180deg, oklch(96% 0.005 250) 0%, oklch(92% 0.01 250) 100%)',
+        background: '#ffffff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -129,7 +129,7 @@ export default function PlaybackPanel() {
     return (
       <div style={{
         width: '100%', height: 500,
-        background: 'linear-gradient(180deg, oklch(96% 0.005 250) 0%, oklch(92% 0.01 250) 100%)',
+        background: '#ffffff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -149,7 +149,7 @@ export default function PlaybackPanel() {
     return (
       <div style={{
         width: '100%', height: 500,
-        background: 'linear-gradient(180deg, oklch(96% 0.005 250) 0%, oklch(92% 0.01 250) 100%)',
+        background: '#ffffff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--text-secondary)',
       }}>
@@ -167,7 +167,7 @@ export default function PlaybackPanel() {
     <div>
       {/* 3D Scene */}
       <div style={{ position: 'relative', width: '100%', height: 500 }}>
-        <Canvas camera={{ position: [8, 8, 8], fov: 50 }} style={{ background: 'linear-gradient(180deg, oklch(18% 0.02 240) 0%, oklch(12% 0.02 240) 100%)' }}>
+        <Canvas camera={{ position: [8, 8, 8], fov: 50 }} style={{ background: '#ffffff' }}>
           <ambientLight intensity={0.5} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
           <Grid args={[40, 40]} cellSize={1} cellThickness={0.5} cellColor="#94a3b8" />
@@ -196,7 +196,7 @@ export default function PlaybackPanel() {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
         padding: 'var(--space-4) var(--space-6)',
-        background: 'oklch(98% 0.005 250)',
+        background: '#ffffff',
         borderTop: '1px solid var(--border-default)',
       }}
       >
