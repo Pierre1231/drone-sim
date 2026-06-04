@@ -26,7 +26,8 @@ function DroneModel({ position, quaternion, motorSpeeds }: {
     propRefs.current.forEach((ref, i) => {
       if (ref) {
         const rpm = motorSpeeds && motorSpeeds[i] > 0 ? motorSpeeds[i] * 0.05 : 120
-        ref.rotation.y += (rpm * 2 * Math.PI / 60) * delta
+        const dir = i === 1 || i === 3 ? -1 : 1 // CW motors (1,3) rotate opposite to CCW (0,2)
+        ref.rotation.y += dir * (rpm * 2 * Math.PI / 60) * delta
       }
     })
   })
@@ -85,15 +86,32 @@ function DroneModel({ position, quaternion, motorSpeeds }: {
           </mesh>
           {/* 旋转的桨叶组 */}
           <group ref={el => { propRefs.current[i] = el }} position={[pos[0], 0.04, pos[2]]}>
-            {/* 桨叶圆盘 */}
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.09, 0.09, 0.002, 32]} />
-              <meshStandardMaterial color={propColors[i]} transparent opacity={0.5} side={THREE.DoubleSide} />
+            {/* 桨叶 1（长条） */}
+            <mesh>
+              <boxGeometry args={[0.18, 0.003, 0.02]} />
+              <meshStandardMaterial color={propColors[i]} transparent opacity={0.55} />
             </mesh>
+            {/* 桨叶 2（垂直交叉） */}
+            <mesh>
+              <boxGeometry args={[0.02, 0.003, 0.18]} />
+              <meshStandardMaterial color={propColors[i]} transparent opacity={0.55} />
+            </mesh>
+            {/* 桨叶尖端标记（用于肉眼判断旋转方向） */}
+            {[
+              { p: [0.08, 0.002, 0] as [number, number, number] },
+              { p: [-0.08, 0.002, 0] as [number, number, number] },
+              { p: [0, 0.002, 0.08] as [number, number, number] },
+              { p: [0, 0.002, -0.08] as [number, number, number] },
+            ].map((t, ti) => (
+              <mesh key={ti} position={t.p}>
+                <sphereGeometry args={[0.006, 6, 6]} />
+                <meshStandardMaterial color={propColors[i]} />
+              </mesh>
+            ))}
             {/* 桨叶中心帽 */}
             <mesh>
-              <sphereGeometry args={[0.012, 8, 8]} />
-              <meshStandardMaterial color={propColors[i]} />
+              <sphereGeometry args={[0.014, 8, 8]} />
+              <meshStandardMaterial color="#333" />
             </mesh>
           </group>
         </group>
