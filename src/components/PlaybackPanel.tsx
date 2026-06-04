@@ -1,11 +1,19 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
+import * as THREE from 'three'
 import { useRef, useEffect, useState } from 'react'
 import { useSimStore } from '@/store/simStore'
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
 
-function DroneModel({ position, quaternion }: { position: [number, number, number]; quaternion: [number, number, number, number] }) {
-  const groupRef = useRef<any>(null)
+function DroneModel({ position, quaternion, motorSpeeds }: {
+  position: [number, number, number]
+  quaternion: [number, number, number, number]
+  motorSpeeds?: number[]
+}) {
+  const groupRef = useRef<THREE.Group>(null)
+  const propRefs = useRef<(THREE.Group | null)[]>([null, null, null, null])
+  const armLength = 0.15
+  const armLen = Math.sqrt(2) * armLength
 
   useEffect(() => {
     if (groupRef.current) {
@@ -14,17 +22,97 @@ function DroneModel({ position, quaternion }: { position: [number, number, numbe
     }
   }, [position, quaternion])
 
+  useFrame((_, delta) => {
+    propRefs.current.forEach((ref, i) => {
+      if (ref) {
+        const rpm = motorSpeeds && motorSpeeds[i] > 0 ? motorSpeeds[i] * 0.05 : 120
+        ref.rotation.y += (rpm * 2 * Math.PI / 60) * delta
+      }
+    })
+  })
+
+  const motorPositions: [number, number, number][] = [
+    [armLength, 0, armLength],
+    [-armLength, 0, armLength],
+    [-armLength, 0, -armLength],
+    [armLength, 0, -armLength],
+  ]
+
+  const propColors = ['#22c55e', '#ef4444', '#22c55e', '#ef4444']
+
+  const armConfigs = [
+    { pos: [0.075, 0.005, 0.075] as [number, number, number], rot: -Math.PI / 4 },
+    { pos: [-0.075, 0.005, 0.075] as [number, number, number], rot: Math.PI / 4 },
+    { pos: [-0.075, 0.005, -0.075] as [number, number, number], rot: -Math.PI / 4 },
+    { pos: [0.075, 0.005, -0.075] as [number, number, number], rot: Math.PI / 4 },
+  ]
+
+  const legPositions: [number, number, number][] = [
+    [0.12, -0.04, 0.12],
+    [-0.12, -0.04, 0.12],
+    [-0.12, -0.04, -0.12],
+    [0.12, -0.04, -0.12],
+  ]
+
   return (
     <group ref={groupRef}>
-      <mesh>
-        <boxGeometry args={[0.1, 0.05, 0.15]} />
-        <meshStandardMaterial color="#0f172a" />
+      {/* 中心机身 */}
+      <mesh position={[0, 0.01, 0]}>
+        <boxGeometry args={[0.06, 0.03, 0.08]} />
+        <meshStandardMaterial color="#1a1a2e" />
       </mesh>
-      {[[0.15, 0.15], [-0.15, 0.15], [-0.15, -0.15], [0.15, -0.15]].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.03, z]}>
-          <cylinderGeometry args={[0.08, 0.08, 0.005, 16]} />
-          <meshStandardMaterial color={i % 2 === 0 ? '#22c55e' : '#ef4444'} transparent opacity={0.7} />
+      {/* 机身上盖 */}
+      <mesh position={[0, 0.03, 0]}>
+        <boxGeometry args={[0.05, 0.008, 0.07]} />
+        <meshStandardMaterial color="#2d2d44" />
+      </mesh>
+
+      {/* 4 条机臂 */}
+      {armConfigs.map((arm, i) => (
+        <mesh key={`arm-${i}`} position={arm.pos} rotation={[0, arm.rot, 0]}>
+          <boxGeometry args={[armLen, 0.008, 0.008]} />
+          <meshStandardMaterial color="#2d2d44" />
         </mesh>
+      ))}
+
+      {/* 4 个电机座 + 旋转桨叶 */}
+      {motorPositions.map((pos, i) => (
+        <group key={`motor-${i}`}>
+          {/* 电机座 */}
+          <mesh position={[pos[0], 0.025, pos[2]]}>
+            <cylinderGeometry args={[0.018, 0.02, 0.025, 16]} />
+            <meshStandardMaterial color="#4a4a6a" metalness={0.6} roughness={0.3} />
+          </mesh>
+          {/* 旋转的桨叶组 */}
+          <group ref={el => { propRefs.current[i] = el }} position={[pos[0], 0.04, pos[2]]}>
+            {/* 桨叶圆盘 */}
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.09, 0.09, 0.002, 32]} />
+              <meshStandardMaterial color={propColors[i]} transparent opacity={0.5} side={THREE.DoubleSide} />
+            </mesh>
+            {/* 桨叶中心帽 */}
+            <mesh>
+              <sphereGeometry args={[0.012, 8, 8]} />
+              <meshStandardMaterial color={propColors[i]} />
+            </mesh>
+          </group>
+        </group>
+      ))}
+
+      {/* 起落架 */}
+      {legPositions.map((pos, i) => (
+        <group key={`leg-${i}`}>
+          {/* 竖杆 */}
+          <mesh position={[pos[0], pos[1] / 2, pos[2]]}>
+            <cylinderGeometry args={[0.004, 0.004, Math.abs(pos[1]), 8]} />
+            <meshStandardMaterial color="#111" />
+          </mesh>
+          {/* 脚底垫 */}
+          <mesh position={[pos[0], pos[1] - 0.01, pos[2]]}>
+            <cylinderGeometry args={[0.015, 0.015, 0.004, 8]} />
+            <meshStandardMaterial color="#333" />
+          </mesh>
+        </group>
       ))}
     </group>
   )
@@ -171,7 +259,7 @@ export default function PlaybackPanel() {
           <ambientLight intensity={0.5} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
           <Grid args={[40, 40]} cellSize={1} cellThickness={0.5} cellColor="#94a3b8" />
-          <DroneModel position={pos} quaternion={quat} />
+          <DroneModel position={pos} quaternion={quat} motorSpeeds={result.motorSpeeds[currentFrame]} />
           {/* Actual trajectory (blue) */}
           <TrajectoryLine positions={result.position} />
           {/* Reference trajectory (orange dashed) */}
