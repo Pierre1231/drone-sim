@@ -182,6 +182,7 @@ export default function PlaybackPanel() {
   const [currentFrame, setCurrentFrame] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const [gridCellSize, setGridCellSize] = useState(1)
 
   const totalFrames = result?.time.length ?? 0
 
@@ -276,7 +277,7 @@ export default function PlaybackPanel() {
         <Canvas camera={{ position: [8, 8, 8], fov: 50 }} style={{ background: '#ffffff' }}>
           <ambientLight intensity={0.5} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
-          <Grid args={[40, 40]} cellSize={1} cellThickness={0.5} cellColor="#94a3b8" />
+          <Grid args={[40, 40]} cellSize={gridCellSize} cellThickness={0.5} cellColor="#94a3b8" />
           <DroneModel position={pos} quaternion={quat} motorSpeeds={result.motorSpeeds[currentFrame]} />
           {/* Actual trajectory (blue) */}
           <TrajectoryLine positions={result.position} />
@@ -295,6 +296,9 @@ export default function PlaybackPanel() {
           <div>⬆ {(-pos[2]).toFixed(1)} m</div>
           <div>⚡ {result.voltage[currentFrame].toFixed(2)} V</div>
           <div>🔋 {(result.soc[currentFrame] * 100).toFixed(0)}%</div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: 4, paddingTop: 4 }}>
+            <small>网格 1 格 = {gridCellSize} m</small>
+          </div>
         </div>
       </div>
 
@@ -373,6 +377,28 @@ export default function PlaybackPanel() {
               {speed}x
             </button>
           ))}
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          padding: 'var(--space-2) var(--space-3)',
+          border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>网格</span>
+          <input
+            type="range"
+            min={0.5}
+            max={5}
+            step={0.5}
+            value={gridCellSize}
+            onChange={e => setGridCellSize(Number(e.target.value))}
+            style={{ width: 60, accentColor: 'var(--accent-primary)' }}
+          />
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', minWidth: 32, textAlign: 'right',
+          }}>
+            {gridCellSize}m
+          </span>
         </div>
       </div>
     </div>
