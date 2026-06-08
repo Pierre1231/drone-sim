@@ -3,7 +3,7 @@ import { OrbitControls, Grid } from '@react-three/drei'
 import * as THREE from 'three'
 import { useRef, useEffect, useState } from 'react'
 import { useSimStore } from '@/store/simStore'
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Package } from 'lucide-react'
 
 function DroneModel({ position, quaternion, motorSpeeds }: {
   position: [number, number, number]
@@ -218,11 +218,7 @@ export default function PlaybackPanel() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: 'var(--space-4)', opacity: 0.5 }}>
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-            <line x1="12" y1="22.08" x2="12" y2="12"/>
-          </svg>
+          <Package size={64} style={{ display: 'block', margin: '0 auto var(--space-4)', opacity: 0.5 }} strokeWidth={1.5} />
           <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>等待仿真开始</h3>
           <p style={{ fontSize: 14, opacity: 0.7 }}>在上方配置区选择部件并点击"开始仿真"</p>
         </div>
