@@ -202,3 +202,54 @@ export class Figure8Mission {
     return { position: [x, y, -this.targetAltitude], velocity: [vx, vy, 0], landing: false }
   }
 }
+
+export interface FullSpeedMissionParams {
+  targetAltitude: number
+  takeoffDuration: number
+  hoverDuration: number
+  speed: number
+  batteryCutoffSoc: number
+}
+
+export class FullSpeedMission {
+  private targetAltitude: number
+  private takeoffDuration: number
+  private hoverDuration: number
+  private speed: number
+  private batteryCutoffSoc: number
+
+  constructor(params: FullSpeedMissionParams) {
+    this.targetAltitude = params.targetAltitude
+    this.takeoffDuration = params.takeoffDuration
+    this.hoverDuration = params.hoverDuration
+    this.speed = params.speed
+    this.batteryCutoffSoc = params.batteryCutoffSoc
+  }
+
+  getSetpoint(time: number, batteryState?: { soc: number }): Setpoint {
+    if (batteryState && batteryState.soc <= this.batteryCutoffSoc) {
+      return { position: [0, 0, 0], velocity: [0, 0, 0], landing: true }
+    }
+
+    if (time < this.takeoffDuration) {
+      const t = time / this.takeoffDuration
+      const smooth = t * t * (3 - 2 * t)
+      const altitude = this.targetAltitude * smooth
+      const velocityZ = this.targetAltitude * 6 * t * (1 - t) / this.takeoffDuration
+      return { position: [0, 0, -altitude], velocity: [0, 0, -velocityZ], landing: false }
+    }
+
+    if (time < this.takeoffDuration + this.hoverDuration) {
+      return { position: [0, 0, -this.targetAltitude], velocity: [0, 0, 0], landing: false }
+    }
+
+    const cruiseTime = time - this.takeoffDuration - this.hoverDuration
+    const x = this.speed * cruiseTime
+
+    return {
+      position: [x, 0, -this.targetAltitude],
+      velocity: [this.speed, 0, 0],
+      landing: false,
+    }
+  }
+}

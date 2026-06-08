@@ -13,6 +13,20 @@
       "aeroRefSpan": 0.45,
       "aeroRefChord": 0.1,
       "dragCoeffs": { "cdx": 0.3, "cdy": 0.3, "cdz": 0.5 }
+    },
+    {
+      "id": "test-frame",
+      "name": "测试用机架",
+      "mass": 1.5,
+      "wheelbase": 450,
+      "inertiaMatrix": [[0.02, 0, 0], [0, 0.02, 0], [0, 0, 0.03]],
+      "propPositions": [[0.159, 0.159, 0], [-0.159, 0.159, 0], [-0.159, -0.159, 0], [0.159, -0.159, 0]],
+      "propDirections": [[0, 0, -1], [0, 0, -1], [0, 0, -1], [0, 0, -1]],
+      "torqueSigns": [-1, 1, -1, 1],
+      "aeroRefArea": 0.02,
+      "aeroRefSpan": 0.45,
+      "aeroRefChord": 0.1,
+      "dragCoeffs": { "cdx": 0.3, "cdy": 0.3, "cdz": 0.5 }
     }
   ],
   "motors": [
@@ -39,6 +53,18 @@
       "rotorInertia": 1e-5,
       "viscousDamping": 1e-6,
       "noLoadCurrent": 0.6
+    },
+    {
+      "id": "test-motor",
+      "name": "测试用电机 (Kt=0.04)",
+      "mass": 0.06,
+      "kv": 239,
+      "resistance": 0.001,
+      "backEmfCoeff": 0.04,
+      "torqueCoeff": 0.04,
+      "rotorInertia": 1e-5,
+      "viscousDamping": 1e-6,
+      "noLoadCurrent": 0.5
     }
   ],
   "propellers": [
@@ -59,6 +85,15 @@
       "thrustCurve": [[0, 0.12], [0.1, 0.118], [0.2, 0.115], [0.3, 0.11], [0.4, 0.104], [0.5, 0.096], [0.6, 0.087], [0.7, 0.076], [0.8, 0.063], [0.9, 0.048], [1.0, 0.032]],
       "torqueCurve": [[0, 0.018], [0.1, 0.0177], [0.2, 0.0173], [0.3, 0.0167], [0.4, 0.016], [0.5, 0.015], [0.6, 0.014], [0.7, 0.012], [0.8, 0.01], [0.9, 0.008], [1.0, 0.006]],
       "torqueThrustRatio": 0.028
+    },
+    {
+      "id": "test-prop",
+      "name": "测试用桨 (kT=1.8e-5)",
+      "mass": 0.008,
+      "diameter": 0.2286,
+      "thrustCurve": [[0, 0.2125], [0.1, 0.19], [0.2, 0.17], [0.3, 0.15], [0.4, 0.13], [0.5, 0.11], [0.6, 0.09], [0.7, 0.07], [0.8, 0.05], [0.9, 0.035], [1.0, 0.02]],
+      "torqueCurve": [[0, 0.0413], [0.1, 0.037], [0.2, 0.033], [0.3, 0.029], [0.4, 0.025], [0.5, 0.021], [0.6, 0.017], [0.7, 0.013], [0.8, 0.009], [0.9, 0.006], [1.0, 0.003]],
+      "torqueThrustRatio": 0.0444
     }
   ],
   "batteryCells": [
@@ -69,6 +104,16 @@
       "ocvCoeffs": [3.0, 3.5, -2.0, 1.0],
       "internalResistance": 0.002,
       "maxDischargeRate": 25
+    },
+    {
+      "id": "test-battery",
+      "name": "测试用电芯 (线性OCV)",
+      "type": "LiPo",
+      "ocvCoeffs": [3.3, 0.9, 0, 0],
+      "internalResistance": 0.0125,
+      "maxDischargeRate": 25,
+      "dynamicResistance": 0.005,
+      "polarizationTau": 30
     }
   ],
   "escs": [
@@ -85,6 +130,13 @@
       "mass": 0.03,
       "maxCurrent": 40,
       "resistance": 0.002
+    },
+    {
+      "id": "test-esc",
+      "name": "测试用电调",
+      "mass": 0.025,
+      "maxCurrent": 30,
+      "resistance": 0.003
     }
   ]
 }

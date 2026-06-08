@@ -43,6 +43,10 @@ export interface BatteryCell {
   ocvCoeffs: [number, number, number, number] // [a0, a1, a2, a3]
   internalResistance: number // ohms per cell
   maxDischargeRate: number // C
+  /** Dynamic polarization resistance (Ω per cell), default 0 */
+  dynamicResistance?: number
+  /** Polarization time constant (s), default 1 */
+  polarizationTau?: number
 }
 
 export interface ESC {

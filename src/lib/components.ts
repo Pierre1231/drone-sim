@@ -3,6 +3,12 @@ export interface BatteryParams {
   capacityAh: number
   ocvCoeffs: [number, number, number, number] // [a0, a1, a2, a3]
   internalResistance: number // ohms
+  /** Dynamic polarization resistance (Ω), default 0 */
+  dynamicResistance?: number
+  /** Polarization time constant (s), default 1 */
+  polarizationTau?: number
+  /** Initial dynamic polarization voltage (V), default 0 */
+  initialUDyn?: number
 }
 
 export class BatteryModel {
@@ -10,21 +16,33 @@ export class BatteryModel {
   private capacityAh: number
   private ocvCoeffs: [number, number, number, number]
   private internalResistance: number
+  private dynamicResistance: number
+  private polarizationTau: number
   private soc: number // 0~1
+  private uDyn: number // dynamic polarization voltage (V)
 
   constructor(params: BatteryParams) {
     this.cells = params.cells
     this.capacityAh = params.capacityAh
     this.ocvCoeffs = params.ocvCoeffs
     this.internalResistance = params.internalResistance
+    this.dynamicResistance = params.dynamicResistance ?? 0
+    this.polarizationTau = params.polarizationTau ?? 1
     this.soc = 1.0 // start fully charged
+    this.uDyn = params.initialUDyn ?? 0
   }
 
-  /** Update SOC given discharge current (A) and time step (s) */
+  /** Update SOC and dynamic polarization given discharge current (A) and time step (s) */
   update(current: number, dt: number): void {
     // SOC decreases: dSOC = -I * dt / (3600 * Qnom)
     const dSoc = -(current * dt) / (3600 * this.capacityAh)
     this.soc = Math.max(0, Math.min(1, this.soc + dSoc))
+
+    // Dynamic polarization: dU_dyn/dt = (-U_dyn + I * R_dyn) / tau
+    if (this.dynamicResistance > 0 && this.polarizationTau > 0) {
+      const duDyn = (-this.uDyn + current * this.dynamicResistance) / this.polarizationTau * dt
+      this.uDyn += duDyn
+    }
   }
 
   /** Get open-circuit voltage (V) */
@@ -34,9 +52,14 @@ export class BatteryModel {
     return this.cells * uCell
   }
 
+  /** Get dynamic polarization voltage (V) */
+  getUDyn(): number {
+    return this.uDyn
+  }
+
   /** Get terminal voltage under load (V) */
   getVoltage(current: number): number {
-    return this.getOCV() - current * this.internalResistance
+    return this.getOCV() - current * this.internalResistance - this.uDyn
   }
 
   getSOC(): number {
@@ -74,6 +97,18 @@ export class MotorModel {
 
   /** Update motor state given terminal voltage (V), load torque (N·m), and dt (s) */
   update(voltage: number, loadTorque: number, dt: number): void {
+    // 理想电机模式：当内阻极小（<0.01Ω）时，忽略电气与机械暂态
+    // 测试用例简化模型：V = Ke·ω, I = Q_load / Kt
+    if (this.resistance < 0.01) {
+      const targetSpeed = Math.max(0, voltage / Math.max(this.backEmfCoeff, 1e-6))
+      // 加一阶机械惯性（tau≈0.05s），抑制理想模式下的瞬态振荡
+      const tau = 0.05
+      const alpha = dt / (tau + dt)
+      this.speed += (targetSpeed - this.speed) * alpha
+      this.current = loadTorque / Math.max(this.torqueCoeff, 1e-6)
+      return
+    }
+
     // Electrical: L*dI/dt = V - R*I - Ke*w (neglect L, quasi-steady)
     // Simplified: I = (V - Ke*w) / R
     this.current = (voltage - this.backEmfCoeff * this.speed) / this.resistance

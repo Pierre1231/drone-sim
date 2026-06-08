@@ -3,14 +3,13 @@ import { useSimStore } from '@/store/simStore'
 import { getFrames, getMotors, getPropellers, getBatteryCells, getESCs, getFrameById, getMotorById, getPropellerById, getBatteryCellById, getESCById } from '@/lib/database'
 import { getDronePresets, getPresetById } from '@/lib/presets'
 import { Package } from 'lucide-react'
-import { estimateHoverPerformance } from '@/lib/estimation'
 import type { SimConfig } from '@/lib/simulation'
 import { Play, Square, Wind, Shield, Cpu, Fan, Battery, Gauge } from 'lucide-react'
 import { useRef } from 'react'
 
 export default function ConfigPanel() {
   const { config, setConfig } = useConfigStore()
-  const { status, progress, setStatus, setProgress, setResult, setError, reset } = useSimStore()
+  const { status, progress, setStatus, setProgress, setResult, setError, setMissionType, reset } = useSimStore()
   const workerRef = useRef<Worker | null>(null)
 
   const frames = getFrames()
@@ -19,26 +18,6 @@ export default function ConfigPanel() {
   const batteryCells = getBatteryCells()
   const escs = getESCs()
   const presets = getDronePresets()
-
-  // Real-time estimation
-  const estimation = (() => {
-    if (!config.motorId || !config.propellerId || config.batteryCapacity <= 0) return null
-    try {
-      return estimateHoverPerformance({
-        totalWeightKg: config.totalWeight,
-        propDiameterIn: propellers.find(p => p.id === config.propellerId)?.diameter
-          ? propellers.find(p => p.id === config.propellerId)!.diameter / 0.0254
-          : 9,
-        batteryCapacityMah: config.batteryCapacity,
-        batteryCells: config.batteryCells,
-        motorEfficiency: 0.75,
-      })
-    } catch {
-      return null
-    }
-  })()
-
-  const missionLabel = config.missionType === 'hover' ? '悬停续航测试' : config.missionType === 'circle' ? '圆轨迹续航测试' : '8字机动续航测试'
 
   return (
     <section id="config" style={{ width: '100%', padding: 'var(--space-16) var(--space-6)' }}>
@@ -151,20 +130,6 @@ export default function ConfigPanel() {
           </ConfigCard>
         </div>
 
-        {/* Real-time Estimate */}
-        {estimation && (
-          <div style={{
-            display: 'flex', gap: 'var(--space-8)', padding: 'var(--space-5)',
-            background: 'var(--accent-subtle)', borderRadius: 'var(--radius-lg)',
-            marginBottom: 'var(--space-8)', flexWrap: 'wrap',
-          }}>
-            <EstimateItem label="预计悬停时间" value={`${estimation.hoverTimeMin.toFixed(1)} min`} />
-            <EstimateItem label="预计电流" value={`${estimation.currentA.toFixed(1)} A`} />
-            <EstimateItem label="整机重量" value={`${config.totalWeight.toFixed(2)} kg`} />
-            <EstimateItem label="当前任务" value={missionLabel} />
-          </div>
-        )}
-
         {/* Task Selector */}
         <div style={{ marginBottom: 'var(--space-6)' }}>
           <label style={{
@@ -173,30 +138,73 @@ export default function ConfigPanel() {
           }}>
             选择飞行任务
           </label>
-          <div style={{
-            display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-1)',
-            background: 'oklch(96% 0.005 250)', borderRadius: 'var(--radius-lg)',
-            width: 'fit-content',
-          }}>
-            <TaskButton active={config.missionType === 'hover'}
-              onClick={() => setConfig({ missionType: 'hover' })}>
-              悬停续航测试
-            </TaskButton>
-            <TaskButton active={config.missionType === 'circle'}
-              onClick={() => setConfig({ missionType: 'circle' })}>
-              圆轨迹续航测试
-            </TaskButton>
-            <TaskButton active={config.missionType === 'figure8'}
-              onClick={() => setConfig({ missionType: 'figure8' })}>
-              8字机动续航测试
-            </TaskButton>
+
+          {/* 标准场景 */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>标准场景</span>
+            <div style={{
+              display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-1)',
+              background: 'oklch(96% 0.005 250)', borderRadius: 'var(--radius-lg)',
+              width: 'fit-content', marginTop: 'var(--space-2)',
+            }}>
+              <TaskButton active={config.missionType === 'hover'}
+                onClick={() => setConfig({ missionType: 'hover' })}>
+                悬停续航
+              </TaskButton>
+              <TaskButton active={config.missionType === 'circle'}
+                onClick={() => setConfig({ missionType: 'circle' })}>
+                圆轨迹
+              </TaskButton>
+              <TaskButton active={config.missionType === 'figure8'}
+                onClick={() => setConfig({ missionType: 'figure8' })}>
+                8字机动
+              </TaskButton>
+              <TaskButton active={config.missionType === 'fullspeed'}
+                onClick={() => setConfig({ missionType: 'fullspeed' })}>
+                全速飞行
+              </TaskButton>
+            </div>
           </div>
+
+          {/* 测试场景 */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>测试场景（固定参数）</span>
+            <div style={{
+              display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-1)',
+              background: 'oklch(96% 0.005 250)', borderRadius: 'var(--radius-lg)',
+              width: 'fit-content', marginTop: 'var(--space-2)',
+            }}>
+              <TaskButton active={config.missionType === 'test-hover'}
+                onClick={() => setConfig({ missionType: 'test-hover' })}>
+                测试-悬停
+              </TaskButton>
+              <TaskButton active={config.missionType === 'test-circle'}
+                onClick={() => setConfig({ missionType: 'test-circle' })}>
+                测试-圆轨迹
+              </TaskButton>
+              <TaskButton active={config.missionType === 'test-figure8'}
+                onClick={() => setConfig({ missionType: 'test-figure8' })}>
+                测试-8字机动
+              </TaskButton>
+            </div>
+          </div>
+
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 'var(--space-2)' }}>
             {config.missionType === 'hover'
               ? '无人机起飞至 10m 高度并悬停，直到电池电量降至 20% 后自动降落'
               : config.missionType === 'circle'
                 ? '无人机起飞后执行圆轨迹飞行（半径 5m，速度 2m/s），直到电池电量降至 20%'
-                : '无人机起飞后执行8字轨迹飞行（半径 5m，速度 2m/s），直到电池电量降至 20%'}
+                : config.missionType === 'figure8'
+                  ? '无人机起飞后执行8字轨迹飞行（半径 5m，速度 2m/s），直到电池电量降至 20%'
+                  : config.missionType === 'fullspeed'
+                    ? '无人机起飞后以 8m/s 最大速度沿直线水平飞行，直到电池电量降至 20%'
+                    : config.missionType === 'test-hover'
+                    ? '【测试场景】使用 test-standard 预设参数，悬停至 10m，验证推力≈14.7N、电流≈16.4A、时间≈880s'
+                    : config.missionType === 'test-circle'
+                      ? '【测试场景】使用 test-standard 预设参数，圆轨迹（半径 5m，速度 2m/s），验证向心加速度与倾斜角'
+                      : config.missionType === 'test-figure8'
+                        ? '【测试场景】使用 test-standard 预设参数，8字轨迹（半径 5m，速度 5m/s），验证横向加速度与推力'
+                        : ''}
           </p>
         </div>
 
@@ -257,6 +265,7 @@ export default function ConfigPanel() {
     if (!motor || !prop) return
 
     reset()
+    setMissionType(config.missionType)
     setStatus('running')
 
     const simConfig: SimConfig = {
@@ -282,12 +291,16 @@ export default function ConfigPanel() {
         capacityAh: config.batteryCapacity / 1000,
         ocvCoeffs: cell?.ocvCoeffs ?? [3.0, 3.5, -2.0, 1.0],
         internalResistance: (cell?.internalResistance ?? 0.002) * config.batteryCells + config.batteryInternalResistance / 1000,
+        dynamicResistance: cell?.dynamicResistance ? cell.dynamicResistance * config.batteryCells : undefined,
+        polarizationTau: cell?.polarizationTau,
       },
       escParams: {
         maxCurrent: esc?.maxCurrent ?? 30,
         resistance: esc?.resistance ?? 0.003,
       },
-      inertia: frame?.inertiaMatrix.map(row => row.reduce((a, b) => a + b, 0) / 3) as [number, number, number] ?? [0.008, 0.008, 0.015],
+      inertia: frame?.inertiaMatrix
+        ? [frame.inertiaMatrix[0][0], frame.inertiaMatrix[1][1], frame.inertiaMatrix[2][2]] as [number, number, number]
+        : [0.008, 0.008, 0.015],
       armLength: (frame?.wheelbase ?? 450) / 1000 / Math.sqrt(2),
     }
 
@@ -391,15 +404,6 @@ function EnvParam({ label, value, icon }: { label: string; value: string; icon?:
       {icon && <span style={{ color: 'var(--text-secondary)' }}>{icon}</span>}
       <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{value}</span>
-    </div>
-  )
-}
-
-function EstimateItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--accent-primary)' }}>{value}</span>
     </div>
   )
 }

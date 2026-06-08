@@ -41,6 +41,22 @@ export const dronePresets: DronePreset[] = [
       totalWeight: 1.6,
     },
   },
+  {
+    id: 'test-standard',
+    name: '测试用标准机',
+    description: '测试用例精确匹配配置：test-frame + test-motor + test-prop + test-battery，参数与理论解析解一致',
+    config: {
+      frameId: 'test-frame',
+      motorId: 'test-motor',
+      escId: 'test-esc',
+      propellerId: 'test-prop',
+      batteryCellId: 'test-battery',
+      batteryCells: 4,
+      batteryCapacity: 5000,
+      batteryWeight: 450,
+      totalWeight: 1.5,
+    },
+  },
 ]
 
 export function getDronePresets(): DronePreset[] {

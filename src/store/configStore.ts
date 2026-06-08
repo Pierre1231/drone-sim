@@ -30,7 +30,7 @@ export interface DroneConfig {
   lowVoltageThreshold: number
 
   // Mission
-  missionType: 'hover' | 'circle' | 'figure8'
+  missionType: 'hover' | 'circle' | 'figure8' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-figure8'
 }
 
 export const defaultConfig: DroneConfig = {

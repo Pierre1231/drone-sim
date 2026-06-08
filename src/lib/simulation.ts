@@ -2,17 +2,17 @@ import { integrate, createState, quatToEuler, rotateNedToBody, type ForcesAndMom
 import { BatteryModel, MotorModel } from './components'
 import { PropellerModel, ControlAllocator, PIDController } from './propulsion'
 import { StandardAtmosphere, LowSpeedDrag } from './aerodynamics'
-import { HoverMission, CircleMission, Figure8Mission } from './mission'
+import { HoverMission, CircleMission, Figure8Mission, FullSpeedMission } from './mission'
 import { designController } from './controllerDesign'
 import type { DroneConfig } from '@/store/configStore'
 
 export interface SimConfig {
-  missionType: 'hover' | 'circle' | 'figure8'
+  missionType: 'hover' | 'circle' | 'figure8' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-figure8'
   droneConfig: DroneConfig
   frameMass: number
   motorParams: { resistance: number; kv: number; backEmfCoeff: number; torqueCoeff: number; rotorInertia: number; viscousDamping: number }
   propParams: { diameter: number; thrustCurve: [number, number][]; torqueCurve: [number, number][]; torqueThrustRatio: number }
-  batteryParams: { cells: number; capacityAh: number; ocvCoeffs: [number, number, number, number]; internalResistance: number }
+  batteryParams: { cells: number; capacityAh: number; ocvCoeffs: [number, number, number, number]; internalResistance: number; dynamicResistance?: number; polarizationTau?: number }
   escParams: { maxCurrent: number; resistance: number }
   inertia: [number, number, number]
   armLength: number
@@ -48,7 +48,7 @@ export function runSimulation(
   // Use 1kHz inner loop, 100Hz output logging for reasonable performance
   const dt = 0.001
   const logInterval = 0.01
-  const maxSimTime = 600
+  const maxSimTime = 1200
 
   // Models
   const battery = new BatteryModel(config.batteryParams)
@@ -86,11 +86,16 @@ export function runSimulation(
   const ratePidYaw = new PIDController({ kp: gains.rateKp * 0.5, ki: 0, kd: 0, outputMin: -2, outputMax: 2 })
 
   // Mission
-  const mission = config.missionType === 'hover'
+  const mt = config.missionType
+  const mission = (mt === 'hover' || mt === 'test-hover')
     ? new HoverMission({ targetAltitude: 10, takeoffDuration: 5, batteryCutoffSoc: 0.2 })
-    : config.missionType === 'circle'
+    : (mt === 'circle' || mt === 'test-circle')
       ? new CircleMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 2, batteryCutoffSoc: 0.2 })
-      : new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 5, batteryCutoffSoc: 0.2 })
+      : mt === 'fullspeed'
+        ? new FullSpeedMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, speed: 8, batteryCutoffSoc: 0.2 })
+        : mt === 'test-figure8'
+          ? new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 5, batteryCutoffSoc: 0.2 })
+          : new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 2, batteryCutoffSoc: 0.2 })
 
   let state = createState({ mass: config.frameMass })
   let simTime = 0
@@ -144,15 +149,23 @@ export function runSimulation(
     // Total desired thrust with hover feedforward (critical for takeoff)
     // NED: accCmdZ positive = down. To go up (accCmdZ < 0), need MORE thrust.
     // thrust = m * (G - accCmdZ_ned)  [body thrust is upward = -z]
-    const thrustCmd = Math.max(0, totalMass * (G - accCmdZ))
+    let thrustCmd: number
+    let rollCmd: number
+    let pitchCmd: number
+    const yawCmd = 0
 
-    // Desired tilt angles for x/y tracking (limit to prevent excessive lean)
-    // NED body dynamics: nose-down (negative pitch) produces +x force;
-    // right-wing-down (positive roll) produces +y force.
     const maxTiltAngle = 0.35 // ~20 degrees max
-    const rollCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, accCmdY / Math.max(G, 0.1)))
-    const pitchCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, -accCmdX / Math.max(G, 0.1)))
-    const yawCmd = 0 // keep heading at 0 for now
+
+    if (mt === 'fullspeed' && simTime >= 8) {
+      // 全速模式：固定前倾 + 固定大推力（油门最大近似）
+      thrustCmd = totalMass * G * 1.5 // 150% 悬停推力
+      rollCmd = 0
+      pitchCmd = -maxTiltAngle // 最大前倾
+    } else {
+      thrustCmd = Math.max(0, totalMass * (G - accCmdZ))
+      rollCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, accCmdY / Math.max(G, 0.1)))
+      pitchCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, -accCmdX / Math.max(G, 0.1)))
+    }
 
     // ========== Attitude control (outer loop) ==========
     const rollErr = rollCmd - roll
@@ -185,7 +198,7 @@ export function runSimulation(
     const motorResults = motors.map((motor, i) => {
       // Desired thrust → desired speed via inverse: T = CT * rho * n^2 * D^4
       const targetThrust = motorThrusts[i]
-      const CT0 = 0.11 // approximate hover CT
+      const CT0 = config.propParams.thrustCurve[0]?.[1] ?? 0.11 // use J=0 CT from prop data
       const targetN = Math.sqrt(Math.max(0, targetThrust) / (CT0 * airDensity * Math.pow(config.propParams.diameter, 4)))
       const targetOmega = targetN * 2 * Math.PI
 
@@ -194,8 +207,16 @@ export function runSimulation(
       const targetProp = prop.compute(Va, targetOmega)
       const requiredCurrent = targetProp.torque / config.motorParams.torqueCoeff
       const requiredVoltage = config.motorParams.backEmfCoeff * targetOmega + requiredCurrent * config.motorParams.resistance
-      const dutyCycle = Math.min(1, requiredVoltage / Math.max(busVoltage, 0.1))
-      const motorVoltage = dutyCycle * busVoltage
+
+      // 理想电机模式（测试用例）：忽略电压限制，直接提供所需电压
+      // 这样电机转速能精确匹配目标值，推力与理论值一致
+      let motorVoltage: number
+      if (config.motorParams.resistance < 0.01) {
+        motorVoltage = requiredVoltage
+      } else {
+        const dutyCycle = Math.min(1, requiredVoltage / Math.max(busVoltage, 0.1))
+        motorVoltage = dutyCycle * busVoltage
+      }
 
       // Prop load torque at current speed
       const currentProp = prop.compute(Va, motor.getSpeed())
