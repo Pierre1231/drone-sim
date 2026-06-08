@@ -92,7 +92,7 @@ export function runSimulation(
     : (mt === 'circle' || mt === 'test-circle')
       ? new CircleMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 2, batteryCutoffSoc: 0.2 })
       : mt === 'fullspeed'
-        ? new FullSpeedMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, speed: 8, batteryCutoffSoc: 0.2 })
+        ? new FullSpeedMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, speed: 7, batteryCutoffSoc: 0.2 })
         : mt === 'test-figure8'
           ? new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 5, batteryCutoffSoc: 0.2 })
           : new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 2, batteryCutoffSoc: 0.2 })
@@ -149,23 +149,15 @@ export function runSimulation(
     // Total desired thrust with hover feedforward (critical for takeoff)
     // NED: accCmdZ positive = down. To go up (accCmdZ < 0), need MORE thrust.
     // thrust = m * (G - accCmdZ_ned)  [body thrust is upward = -z]
-    let thrustCmd: number
-    let rollCmd: number
-    let pitchCmd: number
-    const yawCmd = 0
+    const thrustCmd = Math.max(0, totalMass * (G - accCmdZ))
 
-    const maxTiltAngle = 0.35 // ~20 degrees max
-
-    if (mt === 'fullspeed' && simTime >= 8) {
-      // 全速模式：固定前倾 + 固定大推力（油门最大近似）
-      thrustCmd = totalMass * G * 1.5 // 150% 悬停推力
-      rollCmd = 0
-      pitchCmd = -maxTiltAngle // 最大前倾
-    } else {
-      thrustCmd = Math.max(0, totalMass * (G - accCmdZ))
-      rollCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, accCmdY / Math.max(G, 0.1)))
-      pitchCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, -accCmdX / Math.max(G, 0.1)))
-    }
+    // Desired tilt angles for x/y tracking (limit to prevent excessive lean)
+    // NED body dynamics: nose-down (negative pitch) produces +x force;
+    // right-wing-down (positive roll) produces +y force.
+    const maxTiltAngle = (mt === 'fullspeed' && simTime >= 8) ? 0.785 : 0.35 // fullspeed allows 45° lean
+    const rollCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, accCmdY / Math.max(G, 0.1)))
+    const pitchCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, -accCmdX / Math.max(G, 0.1)))
+    const yawCmd = 0 // keep heading at 0 for now
 
     // ========== Attitude control (outer loop) ==========
     const rollErr = rollCmd - roll

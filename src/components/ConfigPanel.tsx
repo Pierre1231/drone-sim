@@ -197,7 +197,7 @@ export default function ConfigPanel() {
                 : config.missionType === 'figure8'
                   ? '无人机起飞后执行8字轨迹飞行（半径 5m，速度 2m/s），直到电池电量降至 20%'
                   : config.missionType === 'fullspeed'
-                    ? '无人机起飞后以 8m/s 最大速度沿直线水平飞行，直到电池电量降至 20%'
+                    ? '无人机起飞后以 7m/s 沿直线水平飞行（最大倾角 45°），直到电池电量降至 20%'
                     : config.missionType === 'test-hover'
                     ? '【测试场景】使用 test-standard 预设参数，悬停至 10m，验证推力≈14.7N、电流≈16.4A、时间≈880s'
                     : config.missionType === 'test-circle'
