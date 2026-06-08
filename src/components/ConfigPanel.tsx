@@ -5,12 +5,13 @@ import { getDronePresets, getPresetById } from '@/lib/presets'
 import { Package } from 'lucide-react'
 import type { SimConfig } from '@/lib/simulation'
 import { Play, Square, Wind, Shield, Cpu, Fan, Battery, Gauge } from 'lucide-react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 export default function ConfigPanel() {
   const { config, setConfig } = useConfigStore()
   const { status, progress, setStatus, setProgress, setResult, setError, setMissionType, reset } = useSimStore()
   const workerRef = useRef<Worker | null>(null)
+  const [selectedPresetId, setSelectedPresetId] = useState('')
 
   const frames = getFrames()
   const motors = getMotors()
@@ -46,10 +47,13 @@ export default function ConfigPanel() {
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent-primary)' }}>加载预设配置</span>
           </div>
           <select
-            value=""
+            value={selectedPresetId}
             onChange={e => {
               const preset = getPresetById(e.target.value)
-              if (preset) setConfig(preset.config)
+              if (preset) {
+                setSelectedPresetId(e.target.value)
+                setConfig(preset.config)
+              }
             }}
             style={{
               padding: 'var(--space-3) var(--space-4)', border: '1px solid var(--accent-primary)',
