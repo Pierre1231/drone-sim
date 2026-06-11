@@ -9,6 +9,12 @@ export interface BatteryParams {
   polarizationTau?: number
   /** Initial dynamic polarization voltage (V), default 0 */
   initialUDyn?: number
+  /** Thermal capacitance (J/K), default 0 (no thermal model) */
+  thermalCapacitance?: number
+  /** Thermal resistance to ambient (K/W), default 0 */
+  thermalResistance?: number
+  /** Ambient temperature (K), default 298.15 */
+  ambientTemperature?: number
 }
 
 export class BatteryModel {
@@ -18,8 +24,12 @@ export class BatteryModel {
   private internalResistance: number
   private dynamicResistance: number
   private polarizationTau: number
+  private thermalCapacitance: number
+  private thermalResistance: number
+  private ambientTemperature: number
   private soc: number // 0~1
   private uDyn: number // dynamic polarization voltage (V)
+  private temperature: number // battery temperature (K)
 
   constructor(params: BatteryParams) {
     this.cells = params.cells
@@ -28,11 +38,15 @@ export class BatteryModel {
     this.internalResistance = params.internalResistance
     this.dynamicResistance = params.dynamicResistance ?? 0
     this.polarizationTau = params.polarizationTau ?? 1
+    this.thermalCapacitance = params.thermalCapacitance ?? 0
+    this.thermalResistance = params.thermalResistance ?? 0
+    this.ambientTemperature = params.ambientTemperature ?? 298.15
     this.soc = 1.0 // start fully charged
     this.uDyn = params.initialUDyn ?? 0
+    this.temperature = this.ambientTemperature
   }
 
-  /** Update SOC and dynamic polarization given discharge current (A) and time step (s) */
+  /** Update SOC, dynamic polarization and thermal state given discharge current (A) and time step (s) */
   update(current: number, dt: number): void {
     // SOC decreases: dSOC = -I * dt / (3600 * Qnom)
     const dSoc = -(current * dt) / (3600 * this.capacityAh)
@@ -42,6 +56,12 @@ export class BatteryModel {
     if (this.dynamicResistance > 0 && this.polarizationTau > 0) {
       const duDyn = (-this.uDyn + current * this.dynamicResistance) / this.polarizationTau * dt
       this.uDyn += duDyn
+    }
+
+    // Thermal model: dT/dt = (I^2 * R_int - (T - Tamb) / R_th) / C_th
+    if (this.thermalCapacitance > 0 && this.thermalResistance > 0) {
+      const dT = (current * current * this.internalResistance - (this.temperature - this.ambientTemperature) / this.thermalResistance) / this.thermalCapacitance * dt
+      this.temperature += dT
     }
   }
 
@@ -64,6 +84,10 @@ export class BatteryModel {
 
   getSOC(): number {
     return this.soc
+  }
+
+  getTemperature(): number {
+    return this.temperature
   }
 }
 

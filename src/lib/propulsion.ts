@@ -64,27 +64,39 @@ export class PropellerModel {
 
 export interface ControlAllocatorParams {
   armLength: number // m (distance from CG to motor, for X config = wheelbase / sqrt(2))
+  config?: '+' | 'X' // motor configuration, default 'X'
+  torqueThrustRatio?: number // kappa (m), default 0.025
 }
 
 export class ControlAllocator {
   private armLength: number
   private inverseMatrix: number[][]
+  private config: '+' | 'X'
 
   constructor(params: ControlAllocatorParams) {
     this.armLength = params.armLength
+    this.config = params.config ?? 'X'
     this.inverseMatrix = this.computeInverse()
   }
 
   private computeInverse(): number[][] {
     const L = this.armLength
     const kappa = 0.025
+    const inv4 = 1 / 4
+    const inv2L = 1 / (2 * L)
+    const inv4k = 1 / (4 * kappa)
+
+    if (this.config === '+') {
+      return [
+        [inv4,  inv2L,  0,      inv4k],
+        [inv4,  0,      inv2L, -inv4k],
+        [inv4, -inv2L,  0,      inv4k],
+        [inv4,  0,     -inv2L, -inv4k],
+      ]
+    }
 
     // Analytical inverse for X-config 4x4 matrix
-    // From equations: 4*T1 = a+b+c+d, etc.
     const inv4L = 1 / (4 * L)
-    const inv4k = 1 / (4 * kappa)
-    const inv4 = 1 / 4
-
     return [
       [inv4,  inv4L,  inv4L,  inv4k],
       [inv4, -inv4L,  inv4L, -inv4k],

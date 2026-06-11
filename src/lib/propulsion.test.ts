@@ -79,6 +79,38 @@ describe('ControlAllocator', () => {
     const sum = motorThrusts.reduce((a, b) => a + b, 0)
     expect(sum).toBeCloseTo(totalThrust, 5)
   })
+
+  it('should distribute hover thrust equally for plus config', () => {
+    const allocator = new ControlAllocator({ armLength: 0.225, config: '+' })
+
+    const totalThrust = 15 // N (1.5kg * g)
+    const moments: [number, number, number] = [0, 0, 0]
+
+    const motorThrusts = allocator.allocate(totalThrust, moments)
+
+    expect(motorThrusts).toHaveLength(4)
+    expect(motorThrusts[0]).toBeCloseTo(totalThrust / 4, 5)
+    expect(motorThrusts[1]).toBeCloseTo(totalThrust / 4, 5)
+    expect(motorThrusts[2]).toBeCloseTo(totalThrust / 4, 5)
+    expect(motorThrusts[3]).toBeCloseTo(totalThrust / 4, 5)
+  })
+
+  it('should create correct differential thrust for roll moment in plus config', () => {
+    const allocator = new ControlAllocator({ armLength: 0.225, config: '+' })
+
+    const totalThrust = 15
+    const moments: [number, number, number] = [0.5, 0, 0] // roll moment
+
+    const motorThrusts = allocator.allocate(totalThrust, moments)
+
+    // For + config roll: motors 1 (+x) increase, motors 3 (-x) decrease
+    expect(motorThrusts[0]).toBeGreaterThan(motorThrusts[2])
+    expect(motorThrusts[1]).toBeCloseTo(totalThrust / 4, 5) // y-axis motors unchanged
+    expect(motorThrusts[3]).toBeCloseTo(totalThrust / 4, 5)
+
+    const sum = motorThrusts.reduce((a, b) => a + b, 0)
+    expect(sum).toBeCloseTo(totalThrust, 5)
+  })
 })
 
 describe('PIDController', () => {

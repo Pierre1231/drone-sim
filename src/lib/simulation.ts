@@ -12,10 +12,11 @@ export interface SimConfig {
   frameMass: number
   motorParams: { resistance: number; kv: number; backEmfCoeff: number; torqueCoeff: number; rotorInertia: number; viscousDamping: number }
   propParams: { diameter: number; thrustCurve: [number, number][]; torqueCurve: [number, number][]; torqueThrustRatio: number }
-  batteryParams: { cells: number; capacityAh: number; ocvCoeffs: [number, number, number, number]; internalResistance: number; dynamicResistance?: number; polarizationTau?: number }
+  batteryParams: { cells: number; capacityAh: number; ocvCoeffs: [number, number, number, number]; internalResistance: number; dynamicResistance?: number; polarizationTau?: number; thermalCapacitance?: number; thermalResistance?: number; ambientTemperature?: number }
   escParams: { maxCurrent: number; resistance: number }
   inertia: [number, number, number]
   armLength: number
+  config?: '+' | 'X'
 }
 
 export interface SimResult {
@@ -54,7 +55,7 @@ export function runSimulation(
   const battery = new BatteryModel(config.batteryParams)
   const motors = Array.from({ length: 4 }, () => new MotorModel(config.motorParams))
   const prop = new PropellerModel(config.propParams)
-  const allocator = new ControlAllocator({ armLength: config.armLength })
+  const allocator = new ControlAllocator({ armLength: config.armLength, config: config.config ?? 'X' })
   const atm = new StandardAtmosphere()
   const drag = new LowSpeedDrag({ cdx: 0.3, cdy: 0.3, cdz: 0.5 })
 
@@ -242,13 +243,24 @@ export function runSimulation(
     ]
 
     // Moments from thrust differential + prop torque (reaction torque)
-    // X-config: motors at [+L,+L], [-L,+L], [-L,-L], [+L,-L] (front-left, front-right, rear-right, rear-left)
-    // Using right-hand rule for moments
-    const totalMoment: [number, number, number] = [
-      config.armLength * (motorResults[0].thrust - motorResults[1].thrust - motorResults[2].thrust + motorResults[3].thrust),
-      config.armLength * (motorResults[0].thrust + motorResults[1].thrust - motorResults[2].thrust - motorResults[3].thrust),
-      motorResults[0].torque - motorResults[1].torque + motorResults[2].torque - motorResults[3].torque,
-    ]
+    const cfg = config.config ?? 'X'
+    let totalMoment: [number, number, number]
+    if (cfg === '+') {
+      // + config: motors at [+L,0,0], [0,+L,0], [-L,0,0], [0,-L,0] (front, right, rear, left)
+      // chi = [1, -1, 1, -1]
+      totalMoment = [
+        config.armLength * (motorResults[0].thrust - motorResults[2].thrust),
+        config.armLength * (motorResults[1].thrust - motorResults[3].thrust),
+        motorResults[0].torque - motorResults[1].torque + motorResults[2].torque - motorResults[3].torque,
+      ]
+    } else {
+      // X-config: motors at [+L,+L], [-L,+L], [-L,-L], [+L,-L] (front-left, front-right, rear-right, rear-left)
+      totalMoment = [
+        config.armLength * (motorResults[0].thrust - motorResults[1].thrust - motorResults[2].thrust + motorResults[3].thrust),
+        config.armLength * (motorResults[0].thrust + motorResults[1].thrust - motorResults[2].thrust - motorResults[3].thrust),
+        motorResults[0].torque - motorResults[1].torque + motorResults[2].torque - motorResults[3].torque,
+      ]
+    }
 
     const forces: ForcesAndMoments = {
       totalForceBody: totalForceBody,
