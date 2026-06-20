@@ -1,95 +1,55 @@
-# 四旋翼无人机参数选型与飞行仿真平台
+# DroneSim 四旋翼文档工况仿真
 
-基于完整六自由度动力学模型的无人机性能仿真网页应用。
+本项目是一个前端四旋翼仿真网页，当前实现严格围绕项目根目录的两份文档：
+
+- `四旋翼数学模型.md`
+- `四旋翼仿真测试用例.md`
+
+网页提供文档工况运行、3D 回放和文档输出对比。对比面板只对测试用例文档明确给出的输出项做通过/失败判定。
+
+## 文档工况
+
+- B01 全链路悬停：5 m 悬停，推进系统从文档悬停平衡点初始化，运行到 SOC=20%。
+- B02 水平匀速：无风、5 m 高度、沿 +x_n 方向 5 m/s 匀速飞行。
+- B03 圆形轨迹 2 m/s：半径 5 m，高度 5 m。
+- B03 圆形轨迹 7 m/s：半径 5 m，高度 5 m。
+
+8 字机动不属于当前两份文档的闭环测试工况，已从 UI 和任务实现中移除。
 
 ## 技术栈
 
-- **React 19 + TypeScript + Vite** — 前端框架
-- **Tailwind CSS 4 + shadcn/ui** — UI 样式
-- **Three.js + React Three Fiber** — 3D 可视化
-- **ECharts** — 数据图表
-- **Zustand** — 状态管理
-- **Web Worker** — 后台仿真计算
+- React + TypeScript + Vite
+- Three.js / React Three Fiber
+- ECharts
+- Zustand
+- Web Worker
 
-## 核心功能
-
-### 1. 部件选型
-- 从型号库中选择机架、电机、螺旋桨、电池（电芯级）、电调
-- 实时显示悬停时间/电流估算
-- 电芯级电池配置（串数/容量/C率/内阻/重量）
-
-### 2. 飞行仿真
-- **悬停续航测试**：起飞→悬停→电量耗尽→自动降落
-- **8字机动续航测试**：起飞→悬停→8字航线→电量耗尽→降落
-- 完整六自由度动力学（10kHz 步长）
-- 包含：电池动态、电机电气暂态、螺旋桨推进比效应、气动力、标准大气
-
-### 3. 3D 回放
-- 时间序列驱动的飞行动画
-- 播放/暂停/进度条拖拽/倍速控制
-- DJI 风格 HUD（时间/高度/电压/电量）
-- 飞行轨迹线显示
-
-### 4. 数据展示
-- **汇总报告**：飞行时间/距离/功率/高度/速度/电量
-- **图表**：电压/高度/功率/推力曲线
-- **仪表盘**：条形图概览 + 悬停/最大油门对比表
-
-### 5. 控制器自动设计
-- 根据无人机物理参数自动计算串级 PID 增益
-- 带宽分配：角速度 > 姿态 > 速度 > 位置
-
-## 快速开始
+## 运行
 
 ```bash
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
-
-# 运行测试
-npm test
-
-# 构建生产版本
+npm test -- --run
 npm run build
 ```
 
-## 项目结构
+## 主要目录
 
-```
+```text
 src/
-├── components/
-│   ├── ConfigPanel.tsx      # 配置页 UI
-│   ├── PlaybackPanel.tsx    # 3D 回放 + HUD
-│   ├── DataPanel.tsx        # 数据图表 + 仪表盘
-│   └── InfoPanel.tsx        # 原理说明
-├── lib/
-│   ├── estimation.ts        # 悬停性能估算
-│   ├── dynamics.ts          # 六自由度积分器
-│   ├── components.ts        # 电池/电机/电调模型
-│   ├── propulsion.ts        # 螺旋桨/控制分配/PID
-│   ├── aerodynamics.ts      # 标准大气/气动力
-│   ├── mission.ts           # 飞行任务脚本
-│   ├── controllerDesign.ts  # 控制器自动设计
-│   ├── simulation.ts        # 仿真引擎串联
-│   └── database.ts          # 部件数据库加载器
-├── store/
-│   ├── configStore.ts       # 配置状态
-│   └── simStore.ts          # 仿真状态
-├── types/
-│   └── parts.ts             # 部件类型定义
-├── database/
-│   └── parts.json           # 部件数据
-├── workers/
-│   └── simulation.worker.ts # Web Worker
-└── App.tsx                  # 主页面
+  components/
+    ConfigPanel.tsx       文档工况选择与仿真启动
+    PlaybackPanel.tsx     3D 回放与时间控制
+    DataPanel.tsx         文档输出对比与曲线
+    ValidationPanel.tsx   独立文档验证入口
+  lib/
+    dynamics.ts           六自由度刚体积分
+    mission.ts            B01/B02/B03 任务参考输入
+    controller.ts         文档串级控制器
+    propulsion.ts         螺旋桨、PID、控制分配
+    components.ts         电池、电机、电调模型
+    simulation.ts         全链路仿真主循环
+    presets.ts            test-standard 文档参数
+  workers/
+    simulation.worker.ts  后台仿真
 ```
-
-## 数学模型
-
-详细动力学模型见项目根目录 `拦截器数学模型.md`。
-
-## 许可证
-
-MIT
