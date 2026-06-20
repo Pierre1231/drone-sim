@@ -1,10 +1,13 @@
 import { create } from 'zustand'
+import type { WindModelParams } from '@/lib/environment'
 
 export interface DroneConfig {
   // Environment
   temperature: number
   pressure: number
   altitude: number
+  wind?: WindModelParams
+  dragCenter?: [number, number, number]
 
   // Frame
   frameId: string
@@ -30,13 +33,18 @@ export interface DroneConfig {
   lowVoltageThreshold: number
 
   // Mission
-  missionType: 'hover' | 'circle' | 'figure8' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-figure8'
+  missionType: 'hover' | 'circle' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-circle-7'
+
+  // Geometry / layout
+  config?: '+' | 'X'
 }
 
 export const defaultConfig: DroneConfig = {
   temperature: 15,
   pressure: 1013,
   altitude: 0,
+  wind: undefined,
+  dragCenter: undefined,
 
   frameId: '',
   totalWeight: 1.5,
@@ -57,6 +65,8 @@ export const defaultConfig: DroneConfig = {
   lowVoltageThreshold: 14.0,
 
   missionType: 'hover',
+
+  config: 'X',
 }
 
 interface ConfigStore {
