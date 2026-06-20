@@ -103,9 +103,14 @@ body {
   opacity: 1;
 }
 
-/* 块级公式：居中、可横向滚动、防溢出 */
+/* 块级公式：居中、可横向滚动、防溢出
+ * 通过相邻选择器制造「句+式」分组节奏：
+ * - 引导句后紧跟的公式：收紧上间距，读作一个单元
+ * - 公式后开启的新段落：加大上间距，标志单元结束
+ * - 连续公式：保持紧凑，视为同一段推导
+ */
 .tex-block {
-  margin: 18px 0;
+  margin: 16px 0;
   padding: 6px 4px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -117,6 +122,33 @@ body {
 }
 .tex-block::-webkit-scrollbar {
   height: 5px;
+}
+
+/* P 后紧跟的公式：引导句刚说完，公式贴上去 */
+article p + .tex-block {
+  margin-top: 6px;
+}
+
+/* 公式后开启新段落：一个推导单元结束，拉开 */
+article .tex-block + p {
+  margin-top: 22px;
+}
+
+/* 连续公式：同一推导内部，保持紧凑 */
+article .tex-block + .tex-block {
+  margin-top: 8px;
+}
+
+/* 标题后第一个公式/段落：额外呼吸 */
+article .theory-heading + .tex-block,
+article .theory-heading + p {
+  margin-top: 14px;
+}
+
+/* 小节导语与正文之间：适度拉开 */
+article p + h3.theory-heading,
+article .tex-block + h3.theory-heading {
+  margin-top: 52px;
 }
 
 /* 行内公式略微收敛字号，贴合中文正文 */

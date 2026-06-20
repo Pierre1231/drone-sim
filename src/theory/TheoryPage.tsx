@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Menu, X } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { NAV, ALL_SECTION_IDS, type NavNode } from './nav'
-import Inputs from './sections/Inputs'
-import Frames from './sections/Frames'
-import Concepts from './sections/Concepts'
-import ControlModel from './sections/ControlModel'
-import Aerodynamics from './sections/Aerodynamics'
+import CoordinateSystem from './sections/CoordinateSystem'
+import Kinematics from './sections/Kinematics'
+import PropulsionAero from './sections/PropulsionAero'
+import Allocation from './sections/Allocation'
+import InputsSummary from './sections/InputsSummary'
 
 export default function TheoryPage() {
   const [activeId, setActiveId] = useState(ALL_SECTION_IDS[0])
@@ -79,11 +79,11 @@ export default function TheoryPage() {
         <main style={mainStyle}>
           <article style={{ maxWidth: 760, margin: '0 auto', padding: showLeftRail ? '40px 40px 120px' : '28px 20px 100px' }}>
             <DocHeader />
-            <Inputs />
-            <Frames />
-            <Concepts />
-            <ControlModel />
-            <Aerodynamics />
+            <CoordinateSystem />
+            <Kinematics />
+            <PropulsionAero />
+            <Allocation />
+            <InputsSummary />
             <DocFooter />
           </article>
         </main>
@@ -244,8 +244,8 @@ function DocHeader() {
       <div style={docEyebrowStyle}>建模文档</div>
       <h1 style={docTitleStyle}>四旋翼数学模型</h1>
       <p style={docSubtitleStyle}>
-        本页完整呈现四旋翼无人机从输入变量、坐标系、基本概念，到控制模型与气动力模型的数学建模。
-        所有公式、矩阵、参数定义与单位均与建模源文档逐字一致，叙述文字在不改变定义的前提下作了承上启下的补充，便于阅读。
+        本页完整呈现四旋翼无人机从坐标系、刚体运动，到推进器、气动力、控制分配与输入变量的数学建模。
+        所有公式、矩阵、参数定义与单位均与建模源文档一致；叙述文字按物理因果顺序重新组织，便于顺着读、随时查。
       </p>
     </div>
   )

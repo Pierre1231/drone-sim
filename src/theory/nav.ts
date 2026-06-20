@@ -9,60 +9,59 @@ export interface NavNode {
 
 export const NAV: NavNode[] = [
   {
-    id: 'inputs',
+    id: 'coordinate-system',
     label: 'I',
-    title: '输入变量',
+    title: '坐标系与符号约定',
     children: [
-      { id: 'inputs-state', label: 'A', title: '状态变量' },
+      { id: 'cs-frames', label: 'A', title: '坐标系定义' },
+      { id: 'cs-notation', label: 'B', title: '旋转矩阵与符号约定' },
+      { id: 'cs-geometry', label: 'C', title: '基准四旋翼几何' },
+    ],
+  },
+  {
+    id: 'kinematics',
+    label: 'II',
+    title: '刚体运动学与基础概念',
+    children: [
+      { id: 'kin-state', label: 'A', title: '状态变量' },
+      { id: 'kin-euler', label: 'B', title: '欧拉角与旋转矩阵' },
+      { id: 'kin-quaternion', label: 'C', title: '四元数与姿态运动学' },
+      { id: 'kin-rigid', label: 'D', title: '刚体运动学与动力学' },
+      { id: 'kin-inertia', label: 'E', title: '质量、质心与转动惯量' },
+    ],
+  },
+  {
+    id: 'propulsion-aero',
+    label: 'III',
+    title: '推进器与气动力',
+    children: [
+      { id: 'pa-thrust', label: 'A', title: '旋翼推力模型' },
+      { id: 'pa-torque', label: 'B', title: '旋翼反扭矩模型' },
+      { id: 'pa-gyro', label: 'C', title: '旋翼陀螺力矩' },
+      { id: 'pa-environment', label: 'D', title: '环境模型与相对气流' },
+      { id: 'pa-drag', label: 'E', title: '空气阻力与气动阻尼' },
+      { id: 'pa-summary', label: 'F', title: '整机力与力矩汇总' },
+      { id: 'pa-dynamics', label: 'G', title: '电池、电调、电机与螺旋桨动态' },
+    ],
+  },
+  {
+    id: 'allocation',
+    label: 'IV',
+    title: '控制分配',
+    children: [
+      { id: 'alloc-problem', label: 'A', title: '控制分配问题' },
+      { id: 'alloc-matrix', label: 'B', title: '分配矩阵' },
+      { id: 'alloc-constraints', label: 'C', title: '约束与优化' },
+    ],
+  },
+  {
+    id: 'inputs',
+    label: 'V',
+    title: '输入变量总表',
+    children: [
+      { id: 'inputs-state', label: 'A', title: '完整状态向量' },
       { id: 'inputs-external', label: 'B', title: '外部输入' },
       { id: 'inputs-params', label: 'C', title: '模型参数' },
-    ],
-  },
-  {
-    id: 'frames',
-    label: 'II',
-    title: '坐标系',
-  },
-  {
-    id: 'notation',
-    label: 'III',
-    title: '符号约定',
-  },
-  {
-    id: 'concepts',
-    label: 'IV',
-    title: '基本概念',
-    children: [
-      { id: 'concepts-euler', label: 'A', title: '欧拉角' },
-      { id: 'concepts-quaternion', label: 'B', title: '旋转矩阵与四元数' },
-      { id: 'concepts-inertia', label: 'C', title: '质量、质心与转动惯量' },
-      { id: 'concepts-thrust', label: 'D', title: '推力系数' },
-      { id: 'concepts-torque', label: 'E', title: '反扭矩系数' },
-      { id: 'concepts-gyro', label: 'F', title: '旋翼陀螺力矩' },
-    ],
-  },
-  {
-    id: 'control',
-    label: 'V',
-    title: '四旋翼控制模型',
-    children: [
-      { id: 'control-kinematics', label: 'A', title: '刚体运动学模型' },
-      { id: 'control-position', label: 'B', title: '位置动力学模型' },
-      { id: 'control-attitude', label: 'C', title: '姿态动力学模型' },
-      { id: 'control-rigidbody', label: 'D', title: '飞行控制刚体模型' },
-      { id: 'control-allocation', label: 'E', title: '控制分配模型' },
-      { id: 'control-propulsion', label: 'F', title: '推进器模型' },
-    ],
-  },
-  {
-    id: 'aero',
-    label: 'VI',
-    title: '四旋翼气动力模型',
-    children: [
-      { id: 'aero-environment', label: 'A', title: '环境模型' },
-      { id: 'aero-airflow', label: 'B', title: '相对气流' },
-      { id: 'aero-drag', label: 'C', title: '空气阻力模型' },
-      { id: 'aero-damping', label: 'D', title: '气动阻尼力矩模型' },
     ],
   },
 ]

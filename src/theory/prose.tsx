@@ -117,7 +117,7 @@ const h2Style: CSSProperties = {
   fontSize: 30,
   fontWeight: 800,
   color: 'var(--text-primary)',
-  margin: '0 0 20px',
+  margin: '56px 0 20px',
   paddingBottom: 14,
   borderBottom: '1px solid var(--border-default)',
   letterSpacing: '-0.01em',
@@ -128,7 +128,7 @@ const h3Style: CSSProperties = {
   fontSize: 21,
   fontWeight: 750,
   color: 'var(--text-primary)',
-  margin: '40px 0 14px',
+  margin: '44px 0 14px',
 }
 
 const h4Style: CSSProperties = {
@@ -211,7 +211,6 @@ const tdStyle: CSSProperties = {
 const tdFirstStyle: CSSProperties = {
   ...tdStyle,
   color: 'var(--text-primary)',
-  whiteSpace: 'nowrap',
 }
 
 const calloutStyle: CSSProperties = {
