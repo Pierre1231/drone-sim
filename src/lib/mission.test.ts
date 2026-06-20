@@ -107,10 +107,10 @@ describe('CircleMission', () => {
     // At a time when theta=π/4
     // period = 2*PI*5/2 = 5*PI, so omega = 2*PI/period = 2/5 = 0.4
     // theta = π/4 at circleTime = (π/4) / 0.4 = 5π/16 ≈ 0.98s
-    const figure8Start = 5 + 3 // takeoff + hover
+    const circleStart = 5 + 3 // takeoff + hover
     const period = (2 * Math.PI * 5) / 2
     const omega = (2 * Math.PI) / period
-    const tAtPi4 = figure8Start + (Math.PI / 4) / omega
+    const tAtPi4 = circleStart + (Math.PI / 4) / omega
     const sp3 = mission.getSetpoint(tAtPi4)
     expect(sp3.position[0]).toBeCloseTo(5 * Math.cos(Math.PI / 4), 1)
     expect(sp3.position[1]).toBeCloseTo(5 * Math.sin(Math.PI / 4), 1)
@@ -137,3 +137,4 @@ describe('CircleMission', () => {
     expect(sp1.position[1]).toBeCloseTo(sp2.position[1], 0)
   })
 })
+

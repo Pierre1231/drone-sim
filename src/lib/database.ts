@@ -1,7 +1,7 @@
 import partsData from '@/database/parts.json'
 import type { PartsDatabase, Frame, Motor, Propeller, BatteryCell, ESC } from '@/types/parts'
 
-const db = partsData as PartsDatabase
+const db = partsData as unknown as PartsDatabase
 
 export function getDatabase(): PartsDatabase {
   return db

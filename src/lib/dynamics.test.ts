@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { integrate, createState, type ForcesAndMoments } from './dynamics'
+import { integrate, createState, simulateMultiRate, type ForcesAndMoments } from './dynamics'
 
 describe('dynamics', () => {
   const dt = 0.001 // 1ms step
@@ -94,5 +94,47 @@ describe('dynamics', () => {
       current.quaternion[3] ** 2
     )
     expect(norm).toBeCloseTo(1, 6)
+  })
+})
+
+describe('multi-rate integration', () => {
+  it('runs 100 fast steps for each slow step and keeps state synchronized', () => {
+    const fastDt = 0.001
+    const slowDt = 0.1
+    const endTime = 0.5
+    const forces: ForcesAndMoments = {
+      totalForceBody: [0, 0, -1.5 * 9.81],
+      totalMomentBody: [0, 0, 0],
+    }
+
+    let fastCount = 0
+    let slowCount = 0
+    let lastFastTime = -1
+    let lastSlowTime = -1
+
+    const final = simulateMultiRate({
+      fastDt,
+      slowDt,
+      endTime,
+      initialState: createState({ mass: 1.5 }),
+      params: { mass: 1.5, inertia: [0.02, 0.02, 0.03] },
+      forces: () => forces,
+      onFast: (_state, time) => {
+        fastCount++
+        lastFastTime = time
+      },
+      onSlow: (_state, time) => {
+        slowCount++
+        lastSlowTime = time
+      },
+    })
+
+    expect(fastCount).toBe(endTime / fastDt)
+    expect(slowCount).toBe(endTime / slowDt)
+    expect(lastFastTime).toBeCloseTo(endTime, 6)
+    expect(lastSlowTime).toBeCloseTo(endTime, 6)
+    // Hover force should keep the drone near the origin across all rates.
+    expect(final.position[2]).toBeCloseTo(0, 3)
+    expect(final.velocity[2]).toBeCloseTo(0, 3)
   })
 })

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { integrate, createState, quatToEuler } from './dynamics'
 import { BatteryModel } from './components'
-import { runSimulation } from './simulation'
+import { runSimulation, type SimConfig } from './simulation'
+import { buildDocAlignedSimConfig } from './presets'
 
 /** 欧拉角转四元数 (roll-pitch-yaw, NED) */
 function eulerToQuat(roll: number, pitch: number, yaw: number): [number, number, number, number] {
@@ -275,7 +276,7 @@ function runHoverSimulation(params: {
     const a = rint
     const b = -(ocv - uDyn)
     const c = 4 * V_esc_in * I_m + Paux
-    let iBat = 0
+    let iBat: number
     if (a === 0) {
       iBat = -c / b
     } else {
@@ -393,60 +394,103 @@ describe('B. 全链路闭环', () => {
   })
 
   it('B03 圆形轨迹跟踪（使用现有仿真框架）', () => {
-    // 使用现有的 runSimulation，配置接近测试用例的机体参数
+    // 使用测试用例文档中的默认参数
     const result = runSimulation({
       missionType: 'circle',
       droneConfig: {
         temperature: 15,
         pressure: 1013,
         altitude: 0,
-        frameId: 'f450',
+        frameId: 'doc-default',
         totalWeight: 1.5,
-        motorId: '2212-920',
-        escId: 'esc-30a',
-        propellerId: '9450',
+        motorId: 'doc-default',
+        escId: 'doc-default',
+        propellerId: 'doc-default',
         batteryCellId: 'lipo-3.7',
-        batteryCells: 4,
-        batteryCapacity: 5000,
+        batteryCells: 6,
+        batteryCapacity: 8000,
         batteryDischargeRate: 25,
         batteryInternalResistance: 5,
         batteryWeight: 450,
-        maxThrottlePercent: 80,
-        lowVoltageThreshold: 14.0,
+        maxThrottlePercent: 100,
+        lowVoltageThreshold: 16.8,
         missionType: 'circle',
       },
       frameMass: 0.28,
       motorParams: {
-        resistance: 0.25,
-        kv: 920,
-        backEmfCoeff: 0.0105,
-        torqueCoeff: 0.0105,
-        rotorInertia: 1e-5,
-        viscousDamping: 1e-6,
+        resistance: 0.1,
+        kv: 60 / (2 * Math.PI * 0.02),
+        backEmfCoeff: 0.02,
+        torqueCoeff: 0.02,
+        rotorInertia: 2e-5,
+        viscousDamping: 0,
       },
       propParams: {
-        diameter: 0.2286,
+        diameter: 0.254,
         thrustCurve: [
-          [0, 0.11], [0.1, 0.108], [0.2, 0.105], [0.3, 0.10],
-          [0.4, 0.095], [0.5, 0.088], [0.6, 0.08], [0.7, 0.07],
-          [0.8, 0.058], [0.9, 0.045], [1.0, 0.03],
+          [0, 0.1393674],
+          [0.02, 0.1393674 * (1 - 0.6 * 0.02)],
+          [0.04, 0.1393674 * (1 - 0.6 * 0.04)],
+          [0.06, 0.1393674 * (1 - 0.6 * 0.06)],
+          [0.08, 0.1393674 * (1 - 0.6 * 0.08)],
+          [0.10, 0.1393674 * (1 - 0.6 * 0.10)],
         ],
         torqueCurve: [
-          [0, 0.009], [0.1, 0.0089], [0.2, 0.0087], [0.3, 0.0084],
-          [0.4, 0.0081], [0.5, 0.0077], [0.6, 0.0072], [0.7, 0.0066],
-          [0.8, 0.0057], [0.9, 0.0048], [1.0, 0.0036],
+          [0, 0.0243863],
+          [0.02, 0.0243863 * (1 - 0.4 * 0.02)],
+          [0.04, 0.0243863 * (1 - 0.4 * 0.04)],
+          [0.06, 0.0243863 * (1 - 0.4 * 0.06)],
+          [0.08, 0.0243863 * (1 - 0.4 * 0.08)],
+          [0.10, 0.0243863 * (1 - 0.4 * 0.10)],
         ],
-        torqueThrustRatio: 0.025,
+        torqueThrustRatio: 0.0444445,
       },
       batteryParams: {
-        cells: 4,
-        capacityAh: 5,
-        ocvCoeffs: [3.0, 3.5, -2.0, 1.0],
-        internalResistance: 0.008, // 4S 包内阻 (4 * 0.002)
+        cells: 6,
+        capacityAh: 8,
+        ocvCoeffs: [3.3, 0.9, 0, 0],
+        internalResistance: 0.05,
+        dynamicResistance: 0.02,
+        polarizationTau: 30,
+        thermalCapacitance: 1500,
+        thermalResistance: 1,
+        ambientTemperature: 298.15,
       },
-      escParams: { maxCurrent: 30, resistance: 0.003 },
-      inertia: [0.008, 0.008, 0.015],
-      armLength: 0.159,
+      escParams: {
+        minSpeed: 0,
+        maxSpeedAtNominalVoltage: 44.8821 * (6 * 3.7),
+        nominalVoltage: 6 * 3.7,
+        responseTimeConstant: 0.05,
+        throttleExponent: 1,
+        resistance: 0.01,
+        wireResistance: 0.01,
+        switchingLossCoeff: 0.00611621,
+        pwmFrequency: 1,
+      },
+      inertia: [0.02, 0.02, 0.03],
+      armLength: 0.23,
+      config: 'X',
+      dragParams: {
+        cdx: 0.5 * 1.225 * 1.0 * 0.10,
+        cdy: 0,
+        cdz: 0,
+        referenceDensity: 1.225,
+      },
+      dampingParams: {
+        dwx: 0,
+        dwy: 0,
+        dwz: 0,
+        referenceDensity: 1.225,
+      },
+      P_aux: 10,
+      missionParams: { takeoffDuration: 0, hoverDuration: 0 },
+      initialState: {
+        position: [5, 0, -5],
+        velocity: [0, 2, 0],
+        quaternion: [Math.SQRT1_2, 0, 0, Math.SQRT1_2],
+        angularVelocity: [0, 0, 0.4],
+      },
+      maxSimTime: 120,
     })
 
     // 仿真结束后，提取进入圆轨迹后的数据
@@ -466,7 +510,6 @@ describe('B. 全链路闭环', () => {
     // 计算水平速度均值
     const avgSpeed =
       vx.reduce((s, v, i) => s + Math.sqrt(v * v + vy[i] * vy[i]), 0) / vx.length
-    expect(avgSpeed).toBeCloseTo(2, 0) // 目标 2 m/s，允许 ±0.5（控制器跟踪误差范围内）
 
     // 估算轨迹半径：取位置极值
     const xs = positions.map(p => p[0])
@@ -475,6 +518,7 @@ describe('B. 全链路闭环', () => {
     const yMax = Math.max(...ys), yMin = Math.min(...ys)
     const rx = (xMax - xMin) / 2
     const ry = (yMax - yMin) / 2
+    expect(avgSpeed).toBeCloseTo(2, 0) // 目标 2 m/s，允许 ±0.5（控制器跟踪误差范围内）
     expect(rx).toBeCloseTo(5, 0) // 控制器跟踪误差允许 ±0.5
     expect(ry).toBeCloseTo(5, 0)
 
@@ -490,4 +534,258 @@ describe('B. 全链路闭环', () => {
     const expectedPeriod = (2 * Math.PI * 5) / 2
     expect(expectedPeriod).toBeCloseTo(15.708, 1)
   })
+
+  it('B04 稳定北风下的悬停需产生俯仰姿态', () => {
+    const makeConfig = (wind?: { steady: [number, number, number] }): SimConfig => ({
+      missionType: 'test-hover' as const,
+      droneConfig: {
+        temperature: 15,
+        pressure: 1013,
+        altitude: 0,
+        frameId: 'doc-default',
+        totalWeight: 1.5,
+        motorId: 'doc-default',
+        escId: 'doc-default',
+        propellerId: 'doc-default',
+        batteryCellId: 'lipo-3.7',
+        batteryCells: 6,
+        batteryCapacity: 8000,
+        batteryDischargeRate: 25,
+        batteryInternalResistance: 5,
+        batteryWeight: 450,
+        maxThrottlePercent: 100,
+        lowVoltageThreshold: 16.8,
+        missionType: 'test-hover' as const,
+      },
+      wind,
+      frameMass: 0.28,
+      motorParams: {
+        resistance: 0.1,
+        kv: 60 / (2 * Math.PI * 0.02),
+        backEmfCoeff: 0.02,
+        torqueCoeff: 0.02,
+        rotorInertia: 2e-5,
+        viscousDamping: 0,
+      },
+      propParams: {
+        diameter: 0.254,
+        thrustCurve: [
+          [0, 0.1393674],
+          [0.02, 0.1393674 * (1 - 0.6 * 0.02)],
+          [0.04, 0.1393674 * (1 - 0.6 * 0.04)],
+          [0.06, 0.1393674 * (1 - 0.6 * 0.06)],
+          [0.08, 0.1393674 * (1 - 0.6 * 0.08)],
+          [0.10, 0.1393674 * (1 - 0.6 * 0.10)],
+        ],
+        torqueCurve: [
+          [0, 0.0243863],
+          [0.02, 0.0243863 * (1 - 0.4 * 0.02)],
+          [0.04, 0.0243863 * (1 - 0.4 * 0.04)],
+          [0.06, 0.0243863 * (1 - 0.4 * 0.06)],
+          [0.08, 0.0243863 * (1 - 0.4 * 0.08)],
+          [0.10, 0.0243863 * (1 - 0.4 * 0.10)],
+        ],
+        torqueThrustRatio: 0.0444445,
+      },
+      batteryParams: {
+        cells: 6,
+        capacityAh: 8,
+        ocvCoeffs: [3.3, 0.9, 0, 0] as [number, number, number, number],
+        internalResistance: 0.05,
+        dynamicResistance: 0.02,
+        polarizationTau: 30,
+        thermalCapacitance: 1500,
+        thermalResistance: 1,
+        ambientTemperature: 298.15,
+      },
+      escParams: {
+        minSpeed: 0,
+        maxSpeedAtNominalVoltage: 44.8821 * (6 * 3.7),
+        nominalVoltage: 6 * 3.7,
+        responseTimeConstant: 0.05,
+        throttleExponent: 1,
+        resistance: 0.01,
+        wireResistance: 0.01,
+        switchingLossCoeff: 0.00611621,
+        pwmFrequency: 1,
+      },
+      inertia: [0.02, 0.02, 0.03],
+      armLength: 0.23,
+      config: 'X',
+      dragParams: {
+        cdx: 0.5 * 1.225 * 1.0 * 0.10,
+        cdy: 0,
+        cdz: 0,
+        referenceDensity: 1.225,
+      },
+      dampingParams: {
+        dwx: 0,
+        dwy: 0,
+        dwz: 0,
+        referenceDensity: 1.225,
+      },
+      P_aux: 10,
+      missionParams: { takeoffDuration: 0, hoverDuration: 0 },
+      initialState: {
+        position: [0, 0, -5],
+        velocity: [0, 0, 0],
+        quaternion: [1, 0, 0, 0],
+        angularVelocity: [0, 0, 0],
+      },
+      maxSimTime: 20,
+    })
+
+    const noWind = runSimulation(makeConfig(undefined))
+    const withWind = runSimulation(makeConfig({ steady: [10, 0, 0] }))
+
+    const meanAbsPitch = (res: typeof noWind) => {
+      const startIdx = res.time.findIndex(t => t >= 10)
+      let sum = 0
+      for (let i = startIdx; i < res.quaternion.length; i++) {
+        const [, pitch] = quatToEuler(res.quaternion[i] as [number, number, number, number])
+        sum += Math.abs(pitch)
+      }
+      return sum / (res.quaternion.length - startIdx)
+    }
+
+    expect(meanAbsPitch(noWind)).toBeLessThan(0.05)
+    expect(meanAbsPitch(withWind)).toBeGreaterThan(0.15)
+  })
+
+  it('B05 电池放电电流限制触发功率截止', () => {
+    const base = buildDocAlignedSimConfig('test-hover')
+    const result = runSimulation({
+      ...base,
+      batteryParams: {
+        ...base.batteryParams,
+        maxDischargeCurrent: 8,
+      },
+      maxSimTime: 15,
+    })
+
+    const startIdx = result.time.findIndex(t => t >= 5)
+    const avgCurrent =
+      result.current.slice(startIdx).reduce((s, i) => s + i, 0) /
+      (result.current.length - startIdx)
+
+    // The battery model clamps the reported bus current to the limit.
+    expect(avgCurrent).toBeLessThanOrEqual(8 + 0.5)
+
+    // With insufficient thrust the drone cannot hold altitude.
+    const finalAltitude = -result.position[result.position.length - 1][2]
+    expect(finalAltitude).toBeLessThan(4.5)
+  })
+
+  it('B02 水平匀速 5 m/s', () => {
+    const result = runSimulation({
+      missionType: 'fullspeed',
+      droneConfig: {
+        temperature: 15,
+        pressure: 1013,
+        altitude: 0,
+        frameId: 'doc-default',
+        totalWeight: 1.5,
+        motorId: 'doc-default',
+        escId: 'doc-default',
+        propellerId: 'doc-default',
+        batteryCellId: 'lipo-3.7',
+        batteryCells: 6,
+        batteryCapacity: 8000,
+        batteryDischargeRate: 25,
+        batteryInternalResistance: 5,
+        batteryWeight: 450,
+        maxThrottlePercent: 100,
+        lowVoltageThreshold: 16.8,
+        missionType: 'fullspeed',
+      },
+      frameMass: 0.28,
+      motorParams: {
+        resistance: 0.1,
+        kv: 60 / (2 * Math.PI * 0.02),
+        backEmfCoeff: 0.02,
+        torqueCoeff: 0.02,
+        rotorInertia: 2e-5,
+        viscousDamping: 0,
+      },
+      propParams: {
+        diameter: 0.254,
+        thrustCurve: [
+          [0, 0.1393674],
+          [0.02, 0.1393674 * (1 - 0.6 * 0.02)],
+          [0.04, 0.1393674 * (1 - 0.6 * 0.04)],
+          [0.06, 0.1393674 * (1 - 0.6 * 0.06)],
+          [0.08, 0.1393674 * (1 - 0.6 * 0.08)],
+          [0.10, 0.1393674 * (1 - 0.6 * 0.10)],
+        ],
+        torqueCurve: [
+          [0, 0.0243863],
+          [0.02, 0.0243863 * (1 - 0.4 * 0.02)],
+          [0.04, 0.0243863 * (1 - 0.4 * 0.04)],
+          [0.06, 0.0243863 * (1 - 0.4 * 0.06)],
+          [0.08, 0.0243863 * (1 - 0.4 * 0.08)],
+          [0.10, 0.0243863 * (1 - 0.4 * 0.10)],
+        ],
+        torqueThrustRatio: 0.0444445,
+      },
+      batteryParams: {
+        cells: 6,
+        capacityAh: 8,
+        ocvCoeffs: [3.3, 0.9, 0, 0],
+        internalResistance: 0.05,
+        dynamicResistance: 0.02,
+        polarizationTau: 30,
+        thermalCapacitance: 1500,
+        thermalResistance: 1,
+        ambientTemperature: 298.15,
+      },
+      escParams: {
+        minSpeed: 0,
+        maxSpeedAtNominalVoltage: 44.8821 * (6 * 3.7),
+        nominalVoltage: 6 * 3.7,
+        responseTimeConstant: 0.05,
+        throttleExponent: 1,
+        resistance: 0.01,
+        wireResistance: 0.01,
+        switchingLossCoeff: 0.00611621,
+        pwmFrequency: 1,
+      },
+      inertia: [0.02, 0.02, 0.03],
+      armLength: 0.23,
+      config: 'X',
+      dragParams: {
+        cdx: 0.5 * 1.225 * 1.0 * 0.10,
+        cdy: 0,
+        cdz: 0,
+        referenceDensity: 1.225,
+      },
+      dampingParams: {
+        dwx: 0,
+        dwy: 0,
+        dwz: 0,
+        referenceDensity: 1.225,
+      },
+      P_aux: 10,
+      missionParams: { takeoffDuration: 0, hoverDuration: 0, speed: 5 },
+      initialState: {
+        position: [0, 0, -5],
+        velocity: [5, 0, 0],
+        quaternion: [1, 0, 0, 0],
+        angularVelocity: [0, 0, 0],
+      },
+      maxSimTime: 120,
+    })
+
+    const stableStartIdx = result.time.findIndex(t => t >= 60)
+    expect(stableStartIdx).toBeGreaterThan(0)
+    const vx = result.velocity.slice(stableStartIdx).map(v => v[0])
+    const avgSpeed = vx.reduce((s, v) => s + Math.abs(v), 0) / vx.length
+    expect(avgSpeed).toBeCloseTo(5, 0) // ±0.5
+
+    const altitudes = result.position.slice(stableStartIdx).map(p => -p[2])
+    expect(altitudes.every(z => Math.abs(z - 5) < 0.5)).toBe(true)
+
+    const powers = result.power.slice(stableStartIdx)
+    const avgPower = powers.reduce((s, p) => s + p, 0) / powers.length
+    expect(avgPower).toBeCloseTo(341.2, -1) // ±5 W
+  }, 10000)
 })

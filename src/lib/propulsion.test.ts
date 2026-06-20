@@ -16,15 +16,13 @@ describe('PropellerModel', () => {
 
   it('should compute thrust proportional to speed squared at hover', () => {
     const prop = new PropellerModel({
-      diameter: 0.2286, // 9 inches
+      diameter: 0.2286,
       thrustCurve,
       torqueCurve,
       torqueThrustRatio: 0.025,
     })
 
-    // At hover: Va ≈ 0, so J ≈ 0
-    const result = prop.compute(0, 300) // 300 rad/s ≈ 2865 RPM
-
+    const result = prop.compute(0, 300)
     expect(result.thrust).toBeGreaterThan(0)
     expect(result.torque).toBeGreaterThan(0)
     expect(result.power).toBeGreaterThan(0)
@@ -39,77 +37,189 @@ describe('PropellerModel', () => {
     })
 
     const hoverResult = prop.compute(0, 300)
-    const forwardResult = prop.compute(5, 300) // forward flight
-
+    const forwardResult = prop.compute(5, 300)
     expect(forwardResult.thrust).toBeLessThan(hoverResult.thrust)
+  })
+
+  it('matches static thrust model T = k_T(ρ) ω² at zero advance velocity', () => {
+    const prop = new PropellerModel({
+      diameter: 0.2286,
+      thrustCurve,
+      torqueCurve,
+      torqueThrustRatio: 0.025,
+    })
+    const omega = 300
+    const rho = 1.225
+    const kT = prop.getStaticThrustCoefficient(rho)
+    const expectedThrust = kT * omega * omega
+    const result = prop.compute(0, omega, rho)
+    expect(result.thrust).toBeCloseTo(expectedThrust, 6)
+  })
+
+  it('scales thrust with air density', () => {
+    const prop = new PropellerModel({
+      diameter: 0.2286,
+      thrustCurve,
+      torqueCurve,
+      torqueThrustRatio: 0.025,
+    })
+    const omega = 300
+    const seaLevel = prop.compute(0, omega, 1.225)
+    const highAltitude = prop.compute(0, omega, 0.819)
+    expect(highAltitude.thrust).toBeLessThan(seaLevel.thrust)
+    expect(highAltitude.thrust / seaLevel.thrust).toBeCloseTo(0.819 / 1.225, 4)
+  })
+
+  it('computes target omega from desired thrust', () => {
+    const prop = new PropellerModel({
+      diameter: 0.2286,
+      thrustCurve,
+      torqueCurve,
+      torqueThrustRatio: 0.025,
+    })
+    const omega = prop.getTargetOmega(8, 1.225)
+    const result = prop.compute(0, omega, 1.225)
+    expect(result.thrust).toBeCloseTo(8, 6)
   })
 })
 
 describe('ControlAllocator', () => {
-  it('should distribute hover thrust equally among 4 motors', () => {
-    const allocator = new ControlAllocator({ armLength: 0.225 })
+  const L = 0.225
+  const X_positions: [number, number, number][] = [
+    [L, L, 0],
+    [-L, L, 0],
+    [-L, -L, 0],
+    [L, -L, 0],
+  ]
+  const directions: [number, number, number][] = [
+    [0, 0, -1],
+    [0, 0, -1],
+    [0, 0, -1],
+    [0, 0, -1],
+  ]
 
-    const totalThrust = 15 // N (1.5kg * g)
-    const moments: [number, number, number] = [0, 0, 0]
-
-    const motorThrusts = allocator.allocate(totalThrust, moments)
-
-    expect(motorThrusts).toHaveLength(4)
-    expect(motorThrusts[0]).toBeCloseTo(totalThrust / 4, 5)
-    expect(motorThrusts[1]).toBeCloseTo(totalThrust / 4, 5)
-    expect(motorThrusts[2]).toBeCloseTo(totalThrust / 4, 5)
-    expect(motorThrusts[3]).toBeCloseTo(totalThrust / 4, 5)
-  })
-
-  it('should create differential thrust for roll moment', () => {
-    const allocator = new ControlAllocator({ armLength: 0.225 })
-
-    const totalThrust = 15
-    const moments: [number, number, number] = [0.5, 0, 0] // roll moment
-
-    const motorThrusts = allocator.allocate(totalThrust, moments)
-
-    // For X-config roll: motors 1&4 increase, motors 2&3 decrease
-    expect(motorThrusts[0]).toBeGreaterThan(motorThrusts[1])
-    expect(motorThrusts[0]).toBeGreaterThan(motorThrusts[2])
-    expect(motorThrusts[3]).toBeGreaterThan(motorThrusts[1])
-    expect(motorThrusts[3]).toBeGreaterThan(motorThrusts[2])
-
-    // Sum should still equal total thrust
-    const sum = motorThrusts.reduce((a, b) => a + b, 0)
-    expect(sum).toBeCloseTo(totalThrust, 5)
-  })
-
-  it('should distribute hover thrust equally for plus config', () => {
-    const allocator = new ControlAllocator({ armLength: 0.225, config: '+' })
-
-    const totalThrust = 15 // N (1.5kg * g)
-    const moments: [number, number, number] = [0, 0, 0]
-
-    const motorThrusts = allocator.allocate(totalThrust, moments)
-
-    expect(motorThrusts).toHaveLength(4)
-    expect(motorThrusts[0]).toBeCloseTo(totalThrust / 4, 5)
-    expect(motorThrusts[1]).toBeCloseTo(totalThrust / 4, 5)
-    expect(motorThrusts[2]).toBeCloseTo(totalThrust / 4, 5)
-    expect(motorThrusts[3]).toBeCloseTo(totalThrust / 4, 5)
-  })
-
-  it('should create correct differential thrust for roll moment in plus config', () => {
-    const allocator = new ControlAllocator({ armLength: 0.225, config: '+' })
+  it('should distribute hover thrust equally among 4 motors in X config', () => {
+    const allocator = new ControlAllocator({
+      positions: X_positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: 0.025,
+    })
 
     const totalThrust = 15
-    const moments: [number, number, number] = [0.5, 0, 0] // roll moment
+    const result = allocator.allocateWithResidual(totalThrust, [0, 0, 0])
 
-    const motorThrusts = allocator.allocate(totalThrust, moments)
+    expect(result.thrusts).toHaveLength(4)
+    result.thrusts.forEach(t => expect(t).toBeCloseTo(totalThrust / 4, 5))
+    expect(result.residual.every(r => Math.abs(r) < 1e-9)).toBe(true)
+  })
 
-    // For + config roll: motors 1 (+x) increase, motors 3 (-x) decrease
-    expect(motorThrusts[0]).toBeGreaterThan(motorThrusts[2])
-    expect(motorThrusts[1]).toBeCloseTo(totalThrust / 4, 5) // y-axis motors unchanged
-    expect(motorThrusts[3]).toBeCloseTo(totalThrust / 4, 5)
+  it('should create differential thrust for roll moment in X config', () => {
+    const allocator = new ControlAllocator({
+      positions: X_positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: 0.025,
+    })
 
-    const sum = motorThrusts.reduce((a, b) => a + b, 0)
-    expect(sum).toBeCloseTo(totalThrust, 5)
+    // Positive roll moment is produced by rotors on the left side (negative y)
+    const result = allocator.allocateWithResidual(15, [0.5, 0, 0])
+
+    expect(result.thrusts[2]).toBeGreaterThan(result.thrusts[0])
+    expect(result.thrusts[2]).toBeGreaterThan(result.thrusts[1])
+    expect(result.thrusts[3]).toBeGreaterThan(result.thrusts[0])
+    expect(result.thrusts[3]).toBeGreaterThan(result.thrusts[1])
+
+    const sum = result.thrusts.reduce((a, b) => a + b, 0)
+    expect(sum).toBeCloseTo(15, 5)
+  })
+
+  it('should produce yaw moment from differential thrust in X config', () => {
+    const kappa = 0.025
+    const allocator = new ControlAllocator({
+      positions: X_positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: kappa,
+    })
+
+    const result = allocator.allocateWithResidual(15, [0, 0, 0.1])
+    const yaw = kappa * (result.thrusts[0] - result.thrusts[1] + result.thrusts[2] - result.thrusts[3])
+    expect(yaw).toBeCloseTo(0.1, 5)
+  })
+
+  it('should use l/√2 moment arm for X config', () => {
+    const arm = 0.2
+    const positions: [number, number, number][] = [
+      [arm, arm, 0],
+      [-arm, arm, 0],
+      [-arm, -arm, 0],
+      [arm, -arm, 0],
+    ]
+    const allocator = new ControlAllocator({
+      positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: 0.025,
+    })
+
+    const result = allocator.allocateWithResidual(10, [0.1, 0, 0])
+    const sumPos = result.thrusts[2] + result.thrusts[3]
+    const sumNeg = result.thrusts[0] + result.thrusts[1]
+    const moment = arm * (sumPos - sumNeg)
+    expect(moment).toBeCloseTo(0.1, 5)
+  })
+
+  it('should return non-zero residual when a motor saturates at T_max', () => {
+    const allocator = new ControlAllocator({
+      positions: X_positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: 0.025,
+    })
+
+    const result = allocator.allocateWithResidual(20, [2, 0, 0], { T_max: 2 })
+    expect(result.thrusts.some(t => Math.abs(t - 2) < 1e-6)).toBe(true)
+    expect(result.residual.some(r => Math.abs(r) > 1e-3)).toBe(true)
+  })
+
+  it('reduces allocation residual by solving a constrained QP instead of clipping', () => {
+    const allocator = new ControlAllocator({
+      positions: X_positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: 0.025,
+    })
+
+    // Demand that pushes multiple rotors against both upper and lower bounds.
+    const result = allocator.allocateWithResidual(8, [0.8, 0.8, 0.2], { T_max: 3.5 })
+
+    result.thrusts.forEach((t) => {
+      expect(t).toBeGreaterThanOrEqual(0)
+      expect(t).toBeLessThanOrEqual(3.5 + 1e-9)
+    })
+
+    const residualNorm = Math.sqrt(result.residual.reduce((s, r) => s + r * r, 0))
+    // Simple clipping gives a residual norm around 1.0; the QP should do much better.
+    expect(residualNorm).toBeLessThan(0.5)
+  })
+
+  it('should penalize thrust changes when lambda is non-zero', () => {
+    const allocator = new ControlAllocator({
+      positions: X_positions,
+      directions,
+      torqueSigns: [-1, 1, -1, 1],
+      torqueThrustRatio: 0.025,
+      lambda: 10,
+    })
+
+    const prev = [4, 4, 4, 4]
+    const result = allocator.allocateWithResidual(16, [0.2, 0, 0], { previousThrust: prev })
+
+    // Thrusts should deviate less from the previous vector than an unconstrained solution
+    const deviation = result.thrusts.reduce((s, t, i) => s + Math.abs(t - prev[i]), 0)
+    expect(deviation).toBeGreaterThan(0)
+    expect(deviation).toBeLessThan(2)
   })
 })
 
@@ -117,14 +227,9 @@ describe('PIDController', () => {
   it('should reduce error over time for proportional control', () => {
     const pid = new PIDController({ kp: 2.0, ki: 0, kd: 0 })
 
-    const result1 = pid.update(1.0, 0.01) // error = 1.0
-    expect(result1).toBe(2.0) // kp * error
-
-    const result2 = pid.update(0.5, 0.01) // error = 0.5
-    expect(result2).toBe(1.0)
-
-    const result3 = pid.update(0.0, 0.01) // error = 0
-    expect(result3).toBe(0)
+    expect(pid.update(1.0, 0.01)).toBe(2.0)
+    expect(pid.update(0.5, 0.01)).toBe(1.0)
+    expect(pid.update(0.0, 0.01)).toBe(0)
   })
 
   it('should accumulate integral term', () => {
@@ -134,8 +239,7 @@ describe('PIDController', () => {
     pid.update(1.0, 0.1)
     pid.update(1.0, 0.1)
 
-    const result = pid.update(1.0, 0.1)
-    expect(result).toBeCloseTo(0.4, 5) // integral = 1.0 * 0.4
+    expect(pid.update(1.0, 0.1)).toBeCloseTo(0.4, 5)
   })
 
   it('should compute derivative term', () => {
@@ -144,7 +248,6 @@ describe('PIDController', () => {
     pid.update(1.0, 0.1)
     const result = pid.update(0.5, 0.1)
 
-    // derivative = (0.5 - 1.0) / 0.1 = -5.0
     expect(result).toBeCloseTo(-5.0, 5)
   })
 
@@ -154,7 +257,6 @@ describe('PIDController', () => {
     pid.update(1.0, 0.1)
     pid.reset()
 
-    const result = pid.update(1.0, 0.1)
-    expect(result).toBeCloseTo(0.1, 5) // integral reset, only current step
+    expect(pid.update(1.0, 0.1)).toBeCloseTo(0.1, 5)
   })
 })

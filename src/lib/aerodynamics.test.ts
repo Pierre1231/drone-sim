@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { StandardAtmosphere, LowSpeedDrag } from './aerodynamics'
+import { StandardAtmosphere, LowSpeedDrag, AerodynamicDamping, computeDragMomentArm, computeAngleOfAttack, computeSideslipAngle } from './aerodynamics'
 
 describe('StandardAtmosphere', () => {
   it('should return sea level density at h=0', () => {
@@ -91,5 +91,50 @@ describe('LowSpeedDrag', () => {
 
     // z-axis has higher coefficient, so more drag for same speed
     // But here speeds are different, so just check signs
+  })
+
+  it('scales drag with air density relative to reference', () => {
+    const drag = new LowSpeedDrag({ cdx: 1.0, cdy: 1.0, cdz: 1.0, referenceDensity: 1.225 })
+    const seaLevel = drag.compute([2, 0, 0], 1.225)
+    const thinAir = drag.compute([2, 0, 0], 0.6125)
+    expect(thinAir[0]).toBeCloseTo(seaLevel[0] * 0.5, 6)
+  })
+
+  it('computes drag moment arm about the CG', () => {
+    const force: [number, number, number] = [-10, 0, 0]
+    const center: [number, number, number] = [0, 0.1, 0]
+    const moment = computeDragMomentArm(force, center)
+    expect(moment[2]).toBeCloseTo(1, 6) // r_y * F_x with sign r×F = 0.1*(-10)? wait cross: r×F = (0.1*0 - 0*0, 0*(-10)-0*0, 0*0 - 0.1*(-10)) = (0,0,1)
+    expect(moment[0]).toBeCloseTo(0, 6)
+    expect(moment[1]).toBeCloseTo(0, 6)
+  })
+})
+
+describe('AerodynamicDamping', () => {
+  it('produces damping moment opposing angular velocity', () => {
+    const damp = new AerodynamicDamping({ dwx: 0.01, dwy: 0.01, dwz: 0.02 })
+    const moment = damp.compute([2, 0, 0], 1.225)
+    expect(moment[0]).toBeLessThan(0)
+    expect(moment[1]).toBe(0)
+    expect(moment[2]).toBe(0)
+  })
+
+  it('scales damping moment with air density', () => {
+    const damp = new AerodynamicDamping({ dwx: 0.01, dwy: 0.01, dwz: 0.01, referenceDensity: 1.225 })
+    const m1 = damp.compute([2, 0, 0], 1.225)
+    const m2 = damp.compute([2, 0, 0], 0.6125)
+    expect(m2[0]).toBeCloseTo(m1[0] * 0.5, 6)
+  })
+})
+
+describe('flow angles', () => {
+  it('computes angle of attack from body airspeed', () => {
+    expect(computeAngleOfAttack([1, 0, 1])).toBeCloseTo(Math.PI / 4, 6)
+    expect(computeAngleOfAttack([0, 0, 0])).toBe(0)
+  })
+
+  it('computes sideslip angle from body airspeed', () => {
+    expect(computeSideslipAngle([1, 1, 0])).toBeCloseTo(Math.PI / 4, 6)
+    expect(computeSideslipAngle([0, 0, 0])).toBe(0)
   })
 })

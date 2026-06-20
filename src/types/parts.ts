@@ -1,16 +1,22 @@
+import type { Mat3, Vec3 } from '@/lib/coordinates'
+
 export interface Frame {
   id: string
   name: string
   mass: number // kg
   wheelbase: number // mm
-  inertiaMatrix: [[number, number, number], [number, number, number], [number, number, number]]
-  propPositions: [number, number, number][] // 4 motors, relative to CG (m)
-  propDirections: [number, number, number][] // thrust direction unit vectors
+  inertiaMatrix: Mat3
+  propPositions: Vec3[] // 4 motors, relative to CG (m)
+  propDirections: Vec3[] // thrust direction unit vectors
   torqueSigns: number[] // +1 or -1 for each motor
   aeroRefArea: number // m²
   aeroRefSpan: number // m
   aeroRefChord: number // m
   dragCoeffs: { cdx: number; cdy: number; cdz: number }
+  /** Drag force application point relative to CG (m). Default [0,0,0]. */
+  dragCenter?: Vec3
+  /** Body-frame angular damping coefficients (N·m·s²/rad²). Default zeros. */
+  dampingCoeffs?: { dwx: number; dwy: number; dwz: number }
 }
 
 export interface Motor {
@@ -55,6 +61,18 @@ export interface ESC {
   mass: number // kg
   maxCurrent: number // A
   resistance: number // ohms
+  /** First-order duty response time constant τ_esc (s). Default 0. */
+  responseTimeConstant?: number
+  /** Throttle-to-speed nonlinearity γ. Default 1. */
+  throttleExponent?: number
+  /** Wire harness resistance R_wire (Ω). Default 0. */
+  wireResistance?: number
+  /** Switching loss coefficient k_sw f_pwm (V/A). Default 0. */
+  switchingLossCoeff?: number
+  /** PWM / switching frequency f_pwm (Hz). Default 0. */
+  pwmFrequency?: number
+  /** No-load motor speed factor ω_max(U_b) = factor · U_b (rad/s/V). Default U_b / K_e. */
+  maxSpeedFactor?: number
 }
 
 export interface PartsDatabase {

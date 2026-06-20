@@ -8,25 +8,29 @@
       "inertiaMatrix": [[0.008, 0, 0], [0, 0.008, 0], [0, 0, 0.015]],
       "propPositions": [[0.159, 0.159, 0], [-0.159, 0.159, 0], [-0.159, -0.159, 0], [0.159, -0.159, 0]],
       "propDirections": [[0, 0, -1], [0, 0, -1], [0, 0, -1], [0, 0, -1]],
-      "torqueSigns": [-1, 1, -1, 1],
+      "torqueSigns": [1, -1, 1, -1],
       "aeroRefArea": 0.02,
       "aeroRefSpan": 0.45,
       "aeroRefChord": 0.1,
-      "dragCoeffs": { "cdx": 0.3, "cdy": 0.3, "cdz": 0.5 }
+      "dragCoeffs": { "cdx": 0.3, "cdy": 0.3, "cdz": 0.5 },
+      "dragCenter": [0, 0, 0],
+      "dampingCoeffs": { "dwx": 0, "dwy": 0, "dwz": 0 }
     },
     {
       "id": "test-frame",
       "name": "测试用机架",
-      "mass": 1.5,
-      "wheelbase": 450,
+      "mass": 0.28,
+      "wheelbase": 460,
       "inertiaMatrix": [[0.02, 0, 0], [0, 0.02, 0], [0, 0, 0.03]],
-      "propPositions": [[0.159, 0.159, 0], [-0.159, 0.159, 0], [-0.159, -0.159, 0], [0.159, -0.159, 0]],
+      "propPositions": [[0.23, 0, 0], [0, 0.23, 0], [-0.23, 0, 0], [0, -0.23, 0]],
       "propDirections": [[0, 0, -1], [0, 0, -1], [0, 0, -1], [0, 0, -1]],
-      "torqueSigns": [-1, 1, -1, 1],
-      "aeroRefArea": 0.02,
-      "aeroRefSpan": 0.45,
-      "aeroRefChord": 0.1,
-      "dragCoeffs": { "cdx": 0.3, "cdy": 0.3, "cdz": 0.5 }
+      "torqueSigns": [1, -1, 1, -1],
+      "aeroRefArea": 0.10,
+      "aeroRefSpan": 0.46,
+      "aeroRefChord": 0.10,
+      "dragCoeffs": { "cdx": 0.06125, "cdy": 0, "cdz": 0 },
+      "dragCenter": [0, 0, 0],
+      "dampingCoeffs": { "dwx": 0, "dwy": 0, "dwz": 0 }
     }
   ],
   "motors": [
@@ -56,15 +60,15 @@
     },
     {
       "id": "test-motor",
-      "name": "测试用电机 (Kt=0.04)",
+      "name": "测试用电机 (Kt=Ke=0.02)",
       "mass": 0.06,
-      "kv": 239,
-      "resistance": 0.001,
-      "backEmfCoeff": 0.04,
-      "torqueCoeff": 0.04,
-      "rotorInertia": 1e-5,
-      "viscousDamping": 1e-6,
-      "noLoadCurrent": 0.5
+      "kv": 477.464829,
+      "resistance": 0.1,
+      "backEmfCoeff": 0.02,
+      "torqueCoeff": 0.02,
+      "rotorInertia": 2e-5,
+      "viscousDamping": 0,
+      "noLoadCurrent": 0
     }
   ],
   "propellers": [
@@ -88,12 +92,12 @@
     },
     {
       "id": "test-prop",
-      "name": "测试用桨 (kT=1.8e-5)",
+      "name": "测试用桨 (D=0.254, CT0=0.1393674)",
       "mass": 0.008,
-      "diameter": 0.2286,
-      "thrustCurve": [[0, 0.2125], [0.1, 0.19], [0.2, 0.17], [0.3, 0.15], [0.4, 0.13], [0.5, 0.11], [0.6, 0.09], [0.7, 0.07], [0.8, 0.05], [0.9, 0.035], [1.0, 0.02]],
-      "torqueCurve": [[0, 0.0413], [0.1, 0.037], [0.2, 0.033], [0.3, 0.029], [0.4, 0.025], [0.5, 0.021], [0.6, 0.017], [0.7, 0.013], [0.8, 0.009], [0.9, 0.006], [1.0, 0.003]],
-      "torqueThrustRatio": 0.0444
+      "diameter": 0.254,
+      "thrustCurve": [[0, 0.1393674], [0.02, 0.1376949912], [0.04, 0.1360225824], [0.06, 0.1343501736], [0.08, 0.1326777648], [0.10, 0.131005356]],
+      "torqueCurve": [[0, 0.0243863], [0.02, 0.0241912096], [0.04, 0.0239961192], [0.06, 0.0238010288], [0.08, 0.0236059384], [0.10, 0.023410848]],
+      "torqueThrustRatio": 0.0444444444
     }
   ],
   "batteryCells": [
@@ -107,12 +111,12 @@
     },
     {
       "id": "test-battery",
-      "name": "测试用电芯 (线性OCV)",
+      "name": "测试用电芯 (6S 线性OCV)",
       "type": "LiPo",
       "ocvCoeffs": [3.3, 0.9, 0, 0],
-      "internalResistance": 0.0125,
+      "internalResistance": 0.0083333333,
       "maxDischargeRate": 25,
-      "dynamicResistance": 0.005,
+      "dynamicResistance": 0.0033333333,
       "polarizationTau": 30
     }
   ],
@@ -136,7 +140,13 @@
       "name": "测试用电调",
       "mass": 0.025,
       "maxCurrent": 30,
-      "resistance": 0.003
+      "resistance": 0.01,
+      "responseTimeConstant": 0.05,
+      "throttleExponent": 1,
+      "wireResistance": 0.01,
+      "switchingLossCoeff": 0.00611621,
+      "pwmFrequency": 1,
+      "maxSpeedFactor": 44.8821
     }
   ]
 }

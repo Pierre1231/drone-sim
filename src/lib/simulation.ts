@@ -1,22 +1,70 @@
-import { integrate, createState, quatToEuler, rotateNedToBody, type ForcesAndMoments } from './dynamics'
-import { BatteryModel, MotorModel } from './components'
-import { PropellerModel, ControlAllocator, PIDController } from './propulsion'
-import { StandardAtmosphere, LowSpeedDrag } from './aerodynamics'
-import { HoverMission, CircleMission, Figure8Mission, FullSpeedMission } from './mission'
-import { designController } from './controllerDesign'
+import { integrate, createState, type ForcesAndMoments } from './dynamics'
+import { BatteryModel, MotorModel, ESCModel } from './components'
+import type { BatteryParams, MotorParams, ESCParams } from './components'
+import { PropellerModel, ControlAllocator } from './propulsion'
+import { Environment } from './environment'
+import type { WindModelParams } from './environment'
+import { LowSpeedDrag, AerodynamicDamping, computeDragMomentArm } from './aerodynamics'
+import { HoverMission, CircleMission, FullSpeedMission } from './mission'
+import { CascadedController, createDocumentControllerGains } from './controller'
 import type { DroneConfig } from '@/store/configStore'
+import { cross, rotateNedToBody, rotateBodyToNed } from './coordinates'
+import {
+  computeRotorAngularMomentum,
+  computeGyroscopicMoment,
+  computeRotorAccelerationMoment,
+  makeRotorState,
+} from './rotorDynamics'
 
 export interface SimConfig {
-  missionType: 'hover' | 'circle' | 'figure8' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-figure8'
+  missionType: 'hover' | 'circle' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-circle-7'
   droneConfig: DroneConfig
   frameMass: number
-  motorParams: { resistance: number; kv: number; backEmfCoeff: number; torqueCoeff: number; rotorInertia: number; viscousDamping: number }
-  propParams: { diameter: number; thrustCurve: [number, number][]; torqueCurve: [number, number][]; torqueThrustRatio: number }
-  batteryParams: { cells: number; capacityAh: number; ocvCoeffs: [number, number, number, number]; internalResistance: number; dynamicResistance?: number; polarizationTau?: number; thermalCapacitance?: number; thermalResistance?: number; ambientTemperature?: number }
-  escParams: { maxCurrent: number; resistance: number }
+  motorParams: MotorParams
+  propParams: {
+    diameter: number
+    thrustCurve: [number, number][]
+    torqueCurve: [number, number][]
+    torqueThrustRatio: number
+  }
+  batteryParams: BatteryParams
+  escParams: ESCParams
   inertia: [number, number, number]
   armLength: number
   config?: '+' | 'X'
+  /** Optional body-frame quadratic drag coefficients. */
+  dragParams?: { cdx: number; cdy: number; cdz: number; referenceDensity?: number }
+  /** Optional body-frame angular damping coefficients. */
+  dampingParams?: { dwx: number; dwy: number; dwz: number; referenceDensity?: number }
+  /** Optional drag force application point relative to CG (m). */
+  dragCenter?: [number, number, number]
+  /** Optional wind field parameters. */
+  wind?: WindModelParams
+  /** Optional mission parameters. Defaults are chosen from the test-case document. */
+  missionParams?: {
+    targetAltitude?: number
+    takeoffDuration?: number
+    hoverDuration?: number
+    radius?: number
+    speed?: number
+  }
+  /** Auxiliary electrical power (W). Default 10. */
+  P_aux?: number
+  /** Optional initial state. Defaults to origin at rest. */
+  initialState?: {
+    position?: [number, number, number]
+    velocity?: [number, number, number]
+    quaternion?: [number, number, number, number]
+    angularVelocity?: [number, number, number]
+  }
+  /** Optional propulsion initial state. Used by document tests with known trim points. */
+  initialPropulsionState?: {
+    motorSpeeds?: [number, number, number, number] // rad/s
+    motorCurrents?: [number, number, number, number] // A
+    dutyCycles?: [number, number, number, number]
+  }
+  /** Maximum simulation time (s). Default 1200. */
+  maxSimTime?: number
 }
 
 export interface SimResult {
@@ -41,66 +89,176 @@ export interface SimProgress {
   currentTime: number
 }
 
+interface MotorResult {
+  thrust: number
+  torque: number
+  speed: number // rad/s
+  current: number
+  dutyCycle: number
+}
+
+/**
+ * Roughly estimate bus current from the target thrust vector using the static
+ * propeller model. This lets the simulation enforce the battery discharge
+ * limit before the motor loop runs.
+ */
+function estimateBusCurrentFromThrusts(
+  thrusts: readonly number[],
+  busVoltage: number,
+  motorBackEmfCoeff: number,
+  motorTorqueCoeff: number,
+  prop: PropellerModel,
+  airDensity: number,
+  P_aux: number
+): number {
+  if (busVoltage <= 0) return 0
+  const kT = prop.getStaticThrustCoefficient(airDensity)
+  if (kT <= 0) return P_aux / Math.max(busVoltage, 1e-6)
+  const kQ = prop.getTorqueThrustRatio() * kT
+  const fourPi2 = 4 * Math.PI * Math.PI
+  let pwmCurrent = 0
+  for (const T of thrusts) {
+    if (T <= 0) continue
+    const n = Math.sqrt(T / (kT * fourPi2))
+    const omega = n * 2 * Math.PI
+    const Q = kQ * omega * omega
+    const I_m = Q / Math.max(motorTorqueCoeff, 1e-9)
+    const duty = Math.min(1, (motorBackEmfCoeff * omega) / busVoltage)
+    pwmCurrent += duty * I_m
+  }
+  return pwmCurrent + P_aux / Math.max(busVoltage, 1e-6)
+}
+
 export function runSimulation(
   config: SimConfig,
   onProgress?: (p: SimProgress) => void,
   shouldCancel?: () => boolean
 ): SimResult {
-  // Use 1kHz inner loop, 100Hz output logging for reasonable performance
   const dt = 0.001
-  const logInterval = 0.01
-  const maxSimTime = 1200
+  const slowDt = 0.1
+  const maxSimTime = config.maxSimTime ?? 1200
+  // Keep the total number of logged samples bounded (~12000) regardless of how
+  // long the mission runs. Long hover missions (maxSimTime up to 2000 s) would
+  // otherwise produce ~200k points per channel and overwhelm the UI/charts.
+  const logInterval = Math.max(0.01, maxSimTime / 12000)
+  const P_aux = config.P_aux ?? 10
 
   // Models
   const battery = new BatteryModel(config.batteryParams)
   const motors = Array.from({ length: 4 }, () => new MotorModel(config.motorParams))
+  const escs = Array.from({ length: 4 }, () => new ESCModel(config.escParams))
   const prop = new PropellerModel(config.propParams)
-  const allocator = new ControlAllocator({ armLength: config.armLength, config: config.config ?? 'X' })
-  const atm = new StandardAtmosphere()
-  const drag = new LowSpeedDrag({ cdx: 0.3, cdy: 0.3, cdz: 0.5 })
+  const ambientTemperature = config.droneConfig.temperature ?? 15
+  const environment = new Environment({
+    atmosphere: { deltaT: (ambientTemperature + 273.15) - 288.15 },
+    wind: config.wind,
+  })
+  const drag = new LowSpeedDrag(config.dragParams ?? { cdx: 0.3, cdy: 0.3, cdz: 0.5 })
+  const damp = config.dampingParams
+    ? new AerodynamicDamping(config.dampingParams)
+    : null
 
-  // Controller gains
-  const gains = designController({
-    mass: config.droneConfig.totalWeight,
-    inertia: config.inertia,
-    maxThrustPerMotor: 15,
-    motorTimeConstant: config.motorParams.rotorInertia / Math.max(config.motorParams.viscousDamping, 1e-8),
-    armLength: config.armLength,
+  // Geometry: armLength is the physical center-to-motor distance.
+  const cfg = config.config ?? 'X'
+  const L = config.armLength
+  const positions: [number, number, number][] = cfg === '+'
+    ? [[L, 0, 0], [0, L, 0], [-L, 0, 0], [0, -L, 0]]
+    : [[L / Math.SQRT2, L / Math.SQRT2, 0], [-L / Math.SQRT2, L / Math.SQRT2, 0], [-L / Math.SQRT2, -L / Math.SQRT2, 0], [L / Math.SQRT2, -L / Math.SQRT2, 0]]
+  const directions: [number, number, number][] = [
+    [0, 0, -1], [0, 0, -1], [0, 0, -1], [0, 0, -1]
+  ]
+  const torqueSigns = [1, -1, 1, -1]
+  const spinSigns = [1, -1, 1, -1]
+  // Document convention: s = χ = [1, -1, 1, -1] for the reference X-frame numbering.
+
+  const allocator = new ControlAllocator({
+    positions,
+    directions,
+    torqueSigns,
+    torqueThrustRatio: config.propParams.torqueThrustRatio,
+    lambda: 1e-3,
   })
 
-  // Cascaded P-only controllers: position → velocity → attitude → rate
-  const posPidX = new PIDController({ kp: gains.positionKp, ki: 0, kd: 0, outputMin: -8, outputMax: 8 })
-  const posPidY = new PIDController({ kp: gains.positionKp, ki: 0, kd: 0, outputMin: -8, outputMax: 8 })
-  const posPidZ = new PIDController({ kp: gains.positionKp, ki: 0, kd: 0, outputMin: -10, outputMax: 10 })
+  const totalMass = config.droneConfig.totalWeight
+  const inertia: [number, number, number] = [config.inertia[0], config.inertia[1], config.inertia[2]]
+  const mp = config.missionParams ?? {}
+  const mt = config.missionType
+  const isTestMission = mt.startsWith('test-')
+  const defaultTakeoff = isTestMission ? 0 : 5
+  const defaultHover = isTestMission ? 0 : 3
 
-  const velPidX = new PIDController({ kp: gains.velocityKp, ki: 0, kd: 0, outputMin: -8, outputMax: 8 })
-  const velPidY = new PIDController({ kp: gains.velocityKp, ki: 0, kd: 0, outputMin: -8, outputMax: 8 })
-  const velPidZ = new PIDController({ kp: gains.velocityKp, ki: 0, kd: 0, outputMin: -15, outputMax: 15 })
+  const controllerLimits = mt === 'test-circle-7'
+    ? {
+        maxVelocity: [2.5, 2.5, 4] as [number, number, number],
+        maxAcceleration: [20, 20, 4] as [number, number, number],
+        maxAngularVelocity: [10, 10, 4] as [number, number, number],
+        maxMoment: [8, 8, 3] as [number, number, number],
+      }
+    : {
+        maxVelocity: [2.5, 2.5, 3] as [number, number, number],
+        maxAcceleration: [2, 2, 3] as [number, number, number],
+        maxAngularVelocity: [6, 6, 3] as [number, number, number],
+        maxMoment: [5, 5, 2] as [number, number, number],
+      }
 
-  // Attitude (outer) + Rate (inner) cascaded loop
-  const attPidRoll = new PIDController({ kp: gains.attitudeKp * 2, ki: 0, kd: 0, outputMin: -6, outputMax: 6 })
-  const attPidPitch = new PIDController({ kp: gains.attitudeKp * 2, ki: 0, kd: 0, outputMin: -6, outputMax: 6 })
-  const attPidYaw = new PIDController({ kp: 1.0, ki: 0, kd: 0, outputMin: -2, outputMax: 2 })
-
-  const ratePidRoll = new PIDController({ kp: gains.rateKp, ki: 0, kd: 0, outputMin: -5, outputMax: 5 })
-  const ratePidPitch = new PIDController({ kp: gains.rateKp, ki: 0, kd: 0, outputMin: -5, outputMax: 5 })
-  const ratePidYaw = new PIDController({ kp: gains.rateKp * 0.5, ki: 0, kd: 0, outputMin: -2, outputMax: 2 })
+  const controller = new CascadedController({
+    mass: totalMass,
+    gains: createDocumentControllerGains(),
+    limits: controllerLimits,
+  })
 
   // Mission
-  const mt = config.missionType
   const mission = (mt === 'hover' || mt === 'test-hover')
-    ? new HoverMission({ targetAltitude: 10, takeoffDuration: 5, batteryCutoffSoc: 0.2 })
-    : (mt === 'circle' || mt === 'test-circle')
-      ? new CircleMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 2, batteryCutoffSoc: 0.2 })
+    ? new HoverMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, batteryCutoffSoc: 0.2 })
+    : (mt === 'circle' || mt === 'test-circle' || mt === 'test-circle-7')
+      ? new CircleMission({
+          targetAltitude: mp.targetAltitude ?? 5,
+          takeoffDuration: mp.takeoffDuration ?? defaultTakeoff,
+          hoverDuration: mp.hoverDuration ?? defaultHover,
+          radius: mp.radius ?? 5,
+          speed: mp.speed ?? (mt === 'test-circle-7' ? 7 : 2),
+          batteryCutoffSoc: 0.2,
+          angularRateFeedforward: mt === 'test-circle-7',
+        })
       : mt === 'fullspeed'
-        ? new FullSpeedMission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, speed: 7, batteryCutoffSoc: 0.2 })
-        : mt === 'test-figure8'
-          ? new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 5, batteryCutoffSoc: 0.2 })
-          : new Figure8Mission({ targetAltitude: 10, takeoffDuration: 5, hoverDuration: 3, radius: 5, speed: 2, batteryCutoffSoc: 0.2 })
+        ? new FullSpeedMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, hoverDuration: mp.hoverDuration ?? defaultHover, speed: mp.speed ?? 5, batteryCutoffSoc: 0.2 })
+        : new HoverMission({ targetAltitude: 5, takeoffDuration: defaultTakeoff, batteryCutoffSoc: 0.2 })
 
-  let state = createState({ mass: config.frameMass })
+  let state = createState({ mass: totalMass })
+  if (config.initialState) {
+    state = {
+      position: config.initialState.position ?? state.position,
+      velocity: config.initialState.velocity ?? state.velocity,
+      quaternion: config.initialState.quaternion ?? state.quaternion,
+      angularVelocity: config.initialState.angularVelocity ?? state.angularVelocity,
+    }
+  }
+
+  const initialPropulsion = config.initialPropulsionState
+  if (initialPropulsion) {
+    const motorSpeeds = initialPropulsion.motorSpeeds
+    const motorCurrents = initialPropulsion.motorCurrents
+    const dutyCycles = initialPropulsion.dutyCycles
+    if (motorCurrents && dutyCycles) {
+      const initialIBat = battery.computeBusCurrent(motorCurrents, dutyCycles, P_aux)
+      battery.setTerminalVoltageFromCurrent(initialIBat)
+    }
+    const initialBusVoltage = battery.getTerminalVoltage()
+    for (let i = 0; i < 4; i++) {
+      motors[i].setState({
+        speed: motorSpeeds?.[i],
+        current: motorCurrents?.[i],
+      })
+      escs[i].setState({
+        dutyCycle: dutyCycles?.[i],
+        dutyCycleTarget: dutyCycles?.[i],
+        busVoltage: initialBusVoltage,
+      })
+    }
+  }
   let simTime = 0
   let nextLogTime = 0
+  let slowAccumulator = 0
 
   const result: SimResult = {
     time: [], position: [], velocity: [], quaternion: [], angularVelocity: [],
@@ -109,187 +267,219 @@ export function runSimulation(
     refPosition: [],
   }
 
-  const totalMass = config.droneConfig.totalWeight
-  const G = 9.81
+  let prevMotorSpeeds = initialPropulsion?.motorSpeeds ? [...initialPropulsion.motorSpeeds] : [0, 0, 0, 0]
+  let lastTargetThrusts = [0, 0, 0, 0]
 
   while (simTime < maxSimTime) {
     if (shouldCancel && shouldCancel()) break
 
     const setpoint = mission.getSetpoint(simTime, { soc: battery.getSOC() })
 
-    if (setpoint.landing && state.position[2] <= 0.05) {
+    if ((config.missionType === 'test-hover' || config.missionType === 'hover' || config.missionType === 'fullspeed' || config.missionType === 'test-circle' || config.missionType === 'circle' || config.missionType === 'test-circle-7') && setpoint.landing) {
       break
     }
 
-    // Extract current attitude from quaternion
-    const [roll, pitch, yaw] = quatToEuler(state.quaternion)
+    if (setpoint.landing && state.position[2] >= -0.05) {
+      break
+    }
 
-    // Battery voltage
-    const totalMotorCurrent = motors.reduce((sum, m) => sum + Math.abs(m.getCurrent()), 0)
-    const busVoltage = battery.getVoltage(totalMotorCurrent)
+    // Environment
+    const airDensity = environment.getDensity(state.position)
+    const windNed = environment.getWind(state.position, simTime)
 
-    // ========== Position control (outer loop) ==========
-    const posErrX = setpoint.position[0] - state.position[0]
-    const posErrY = setpoint.position[1] - state.position[1]
-    const posErrZ = setpoint.position[2] - state.position[2]
+    // Airspeed in body frame
+    const vaNed: [number, number, number] = [
+      state.velocity[0] - windNed[0],
+      state.velocity[1] - windNed[1],
+      state.velocity[2] - windNed[2],
+    ]
+    const vaBody = rotateNedToBody(vaNed, state.quaternion)
 
-    // Add feedforward velocity from mission setpoint for trajectory tracking
-    const velCmdX = posPidX.update(posErrX, dt) + setpoint.velocity[0]
-    const velCmdY = posPidY.update(posErrY, dt) + setpoint.velocity[1]
-    const velCmdZ = posPidZ.update(posErrZ, dt) + setpoint.velocity[2]
+    // Aerodynamic force estimate for controller feedforward (NED frame)
+    const dragBody = drag.compute(vaBody, airDensity)
+    const aeroForceNed = rotateBodyToNed(dragBody, state.quaternion)
 
-    // ========== Velocity control (middle loop) ==========
-    const velErrX = velCmdX - state.velocity[0]
-    const velErrY = velCmdY - state.velocity[1]
-    const velErrZ = velCmdZ - state.velocity[2]
+    // Controller
+    const ctrlOut = controller.update(
+      {
+        position: setpoint.position,
+        velocity: setpoint.velocity,
+        acceleration: setpoint.acceleration,
+        heading: setpoint.heading,
+        angularVelocity: setpoint.angularVelocity,
+      },
+      {
+        position: state.position,
+        velocity: state.velocity,
+        quaternion: state.quaternion,
+        angularVelocity: state.angularVelocity,
+      },
+      dt,
+      { aeroForceNed: aeroForceNed as unknown as [number, number, number] }
+    )
 
-    const accCmdX = velPidX.update(velErrX, dt)
-    const accCmdY = velPidY.update(velErrY, dt)
-    const accCmdZ = velPidZ.update(velErrZ, dt)
+    // Control allocation with saturation limits
+    const busVoltage = battery.getTerminalVoltage()
+    const T_max = ControlAllocator.estimateMaxThrusts({
+      busVoltage,
+      motorBackEmfCoeff: config.motorParams.backEmfCoeff,
+      propeller: prop,
+      airDensity,
+      numRotors: 4,
+    })
+    const alloc = allocator.allocateWithResidual(ctrlOut.totalThrust, ctrlOut.moments as [number, number, number], {
+      T_max,
+      previousThrust: lastTargetThrusts,
+    })
+    let targetThrusts = alloc.thrusts
 
-    // Total desired thrust with hover feedforward (critical for takeoff)
-    // NED: accCmdZ positive = down. To go up (accCmdZ < 0), need MORE thrust.
-    // thrust = m * (G - accCmdZ_ned)  [body thrust is upward = -z]
-    const thrustCmd = Math.max(0, totalMass * (G - accCmdZ))
-
-    // Desired tilt angles for x/y tracking (limit to prevent excessive lean)
-    // NED body dynamics: nose-down (negative pitch) produces +x force;
-    // right-wing-down (positive roll) produces +y force.
-    const maxTiltAngle = (mt === 'fullspeed' && simTime >= 8) ? 0.785 : 0.35 // fullspeed allows 45° lean
-    const rollCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, accCmdY / Math.max(G, 0.1)))
-    const pitchCmd = Math.max(-maxTiltAngle, Math.min(maxTiltAngle, -accCmdX / Math.max(G, 0.1)))
-    const yawCmd = 0 // keep heading at 0 for now
-
-    // ========== Attitude control (outer loop) ==========
-    const rollErr = rollCmd - roll
-    const pitchErr = pitchCmd - pitch
-    const yawErr = yawCmd - yaw
-
-    const rateCmdRoll = attPidRoll.update(rollErr, dt)
-    const rateCmdPitch = attPidPitch.update(pitchErr, dt)
-    const rateCmdYaw = attPidYaw.update(yawErr, dt)
-
-    // ========== Rate control (inner loop) ==========
-    const rateErrRoll = rateCmdRoll - state.angularVelocity[0]
-    const rateErrPitch = rateCmdPitch - state.angularVelocity[1]
-    const rateErrYaw = rateCmdYaw - state.angularVelocity[2]
-
-    const rollMoment = ratePidRoll.update(rateErrRoll, dt)
-    const pitchMoment = ratePidPitch.update(rateErrPitch, dt)
-    const yawMoment = ratePidYaw.update(rateErrYaw, dt)
-
-    const moments: [number, number, number] = [rollMoment, pitchMoment, yawMoment]
-
-    // ========== Control allocation ==========
-    const motorThrusts = allocator.allocate(thrustCmd, moments)
-
-    // ========== Motor + propeller dynamics ==========
-    const altitude = -state.position[2]
-    const airDensity = atm.getDensity(altitude)
-    const Va = -state.velocity[2]
-
-    const motorResults = motors.map((motor, i) => {
-      // Desired thrust → desired speed via inverse: T = CT * rho * n^2 * D^4
-      const targetThrust = motorThrusts[i]
-      const CT0 = config.propParams.thrustCurve[0]?.[1] ?? 0.11 // use J=0 CT from prop data
-      const targetN = Math.sqrt(Math.max(0, targetThrust) / (CT0 * airDensity * Math.pow(config.propParams.diameter, 4)))
-      const targetOmega = targetN * 2 * Math.PI
-
-      // Estimate required motor voltage to achieve target speed under load
-      // V = Ke*w + I*R, where I = Q_load / Kt
-      const targetProp = prop.compute(Va, targetOmega)
-      const requiredCurrent = targetProp.torque / config.motorParams.torqueCoeff
-      const requiredVoltage = config.motorParams.backEmfCoeff * targetOmega + requiredCurrent * config.motorParams.resistance
-
-      // 理想电机模式（测试用例）：忽略电压限制，直接提供所需电压
-      // 这样电机转速能精确匹配目标值，推力与理论值一致
-      let motorVoltage: number
-      if (config.motorParams.resistance < 0.01) {
-        motorVoltage = requiredVoltage
-      } else {
-        const dutyCycle = Math.min(1, requiredVoltage / Math.max(busVoltage, 0.1))
-        motorVoltage = dutyCycle * busVoltage
+    // Enforce the battery discharge current limit by scaling commanded thrusts
+    // when the predicted bus current would exceed the safe value.
+    const I_bat_max = battery.getMaxDischargeCurrent()
+    if (isFinite(I_bat_max) && I_bat_max > 0) {
+      const predictedIBat = estimateBusCurrentFromThrusts(
+        targetThrusts,
+        busVoltage,
+        config.motorParams.backEmfCoeff,
+        config.motorParams.torqueCoeff,
+        prop,
+        airDensity,
+        P_aux
+      )
+      if (predictedIBat > I_bat_max) {
+        const scale = Math.max(0, (I_bat_max / predictedIBat) ** (2 / 3))
+        targetThrusts = targetThrusts.map(t => t * scale)
       }
+    }
 
-      // Prop load torque at current speed
-      const currentProp = prop.compute(Va, motor.getSpeed())
-      motor.update(motorVoltage, currentProp.torque, dt)
+    lastTargetThrusts = [...targetThrusts]
 
-      // Recalculate thrust at new speed
-      const newProp = prop.compute(Va, motor.getSpeed())
+    // Propulsion per rotor
+    const motorResults: MotorResult[] = []
+    for (let i = 0; i < 4; i++) {
+      const r = positions[i]
+      const d = directions[i]
 
-      return {
+      // Rotor hub airspeed: v_i^b = v_a^b + ω × r_i
+      const rotorVelBody: [number, number, number] = [
+        vaBody[0] + state.angularVelocity[1] * r[2] - state.angularVelocity[2] * r[1],
+        vaBody[1] + state.angularVelocity[2] * r[0] - state.angularVelocity[0] * r[2],
+        vaBody[2] + state.angularVelocity[0] * r[1] - state.angularVelocity[1] * r[0],
+      ]
+      const Va = rotorVelBody[0] * d[0] + rotorVelBody[1] * d[1] + rotorVelBody[2] * d[2]
+
+      // Desired thrust → target speed via static inverse
+      const targetOmega = prop.getTargetOmega(targetThrusts[i], airDensity, Va)
+
+      // ESC command and first-order response
+      escs[i].updateCommand(targetOmega, busVoltage)
+      escs[i].update(dt)
+      const dutyCycle = escs[i].getDutyCycle()
+
+      // Motor terminal voltage under load
+      const motorVoltage = escs[i].getOutputVoltage(motors[i].getCurrent())
+
+      // Prop load at current speed
+      const currentProp = prop.compute(Va, motors[i].getSpeed(), airDensity)
+      motors[i].update(motorVoltage, currentProp.torque, dt)
+
+      // Actual output at new speed
+      const newProp = prop.compute(Va, motors[i].getSpeed(), airDensity)
+
+      motorResults.push({
         thrust: newProp.thrust,
         torque: newProp.torque,
-        speed: motor.getSpeed(),
-        current: motor.getCurrent(),
-      }
-    })
-
-    // ========== Total forces and moments ==========
-    const totalThrust = motorResults.reduce((s, r) => s + r.thrust, 0)
-
-    // Body force: thrust along -z body axis
-    const bodyForce: [number, number, number] = [0, 0, -totalThrust]
-
-    // Drag in body frame (velocity_body = R^T * velocity_ned)
-    const velocityBody = rotateNedToBody(state.velocity, state.quaternion)
-    const dragForce = drag.compute(velocityBody)
-
-    const totalForceBody: [number, number, number] = [
-      bodyForce[0] + dragForce[0],
-      bodyForce[1] + dragForce[1],
-      bodyForce[2] + dragForce[2],
-    ]
-
-    // Moments from thrust differential + prop torque (reaction torque)
-    const cfg = config.config ?? 'X'
-    let totalMoment: [number, number, number]
-    if (cfg === '+') {
-      // + config: motors at [+L,0,0], [0,+L,0], [-L,0,0], [0,-L,0] (front, right, rear, left)
-      // chi = [1, -1, 1, -1]
-      totalMoment = [
-        config.armLength * (motorResults[0].thrust - motorResults[2].thrust),
-        config.armLength * (motorResults[1].thrust - motorResults[3].thrust),
-        motorResults[0].torque - motorResults[1].torque + motorResults[2].torque - motorResults[3].torque,
-      ]
-    } else {
-      // X-config: motors at [+L,+L], [-L,+L], [-L,-L], [+L,-L] (front-left, front-right, rear-right, rear-left)
-      totalMoment = [
-        config.armLength * (motorResults[0].thrust - motorResults[1].thrust - motorResults[2].thrust + motorResults[3].thrust),
-        config.armLength * (motorResults[0].thrust + motorResults[1].thrust - motorResults[2].thrust - motorResults[3].thrust),
-        motorResults[0].torque - motorResults[1].torque + motorResults[2].torque - motorResults[3].torque,
-      ]
+        speed: motors[i].getSpeed(),
+        current: motors[i].getCurrent(),
+        dutyCycle,
+      })
     }
 
+    // Total propulsive force and moment
+    const totalForceBody: [number, number, number] = [0, 0, 0]
+    const totalMomentBody: [number, number, number] = [0, 0, 0]
+    for (let i = 0; i < 4; i++) {
+      const r = positions[i]
+      const d = directions[i]
+      const T = motorResults[i].thrust
+      const Q = motorResults[i].torque
+
+      const thrustVec: [number, number, number] = [T * d[0], T * d[1], T * d[2]]
+      totalForceBody[0] += thrustVec[0]
+      totalForceBody[1] += thrustVec[1]
+      totalForceBody[2] += thrustVec[2]
+
+      const thrustMoment = cross(r, thrustVec)
+      totalMomentBody[0] += thrustMoment[0] + torqueSigns[i] * Q * d[0]
+      totalMomentBody[1] += thrustMoment[1] + torqueSigns[i] * Q * d[1]
+      totalMomentBody[2] += thrustMoment[2] + torqueSigns[i] * Q * d[2]
+    }
+
+    // Aerodynamic forces and moments
+    totalForceBody[0] += dragBody[0]
+    totalForceBody[1] += dragBody[1]
+    totalForceBody[2] += dragBody[2]
+
+    if (config.dragCenter) {
+      const dragMoment = computeDragMomentArm(dragBody, config.dragCenter)
+      totalMomentBody[0] += dragMoment[0]
+      totalMomentBody[1] += dragMoment[1]
+      totalMomentBody[2] += dragMoment[2]
+    }
+
+    if (damp) {
+      const dampingMoment = damp.compute(state.angularVelocity, airDensity)
+      totalMomentBody[0] += dampingMoment[0]
+      totalMomentBody[1] += dampingMoment[1]
+      totalMomentBody[2] += dampingMoment[2]
+    }
+
+    // Rotor gyroscopic and acceleration moments
+    const rotorInertia = config.motorParams.rotorInertia
+    const currentRotors = motorResults.map((m, i) => makeRotorState(m.speed, rotorInertia, spinSigns[i]))
+    const prevRotors = prevMotorSpeeds.map((s, i) => makeRotorState(s, rotorInertia, spinSigns[i]))
+    const H = computeRotorAngularMomentum(currentRotors)
+    const M_gyro = computeGyroscopicMoment(state.angularVelocity, H)
+    const M_acc = computeRotorAccelerationMoment(currentRotors, prevRotors, dt)
+    totalMomentBody[0] += M_gyro[0] + M_acc[0]
+    totalMomentBody[1] += M_gyro[1] + M_acc[1]
+    totalMomentBody[2] += M_gyro[2] + M_acc[2]
+
+    prevMotorSpeeds = motorResults.map(m => m.speed)
+
+    // Integrate rigid body
     const forces: ForcesAndMoments = {
-      totalForceBody: totalForceBody,
-      totalMomentBody: totalMoment,
+      totalForceBody,
+      totalMomentBody,
+    }
+    state = integrate(state, forces, dt, { mass: totalMass, inertia })
+
+    // Slow battery update
+    slowAccumulator += dt
+    if (slowAccumulator >= slowDt - 1e-9) {
+      const motorCurrents = motorResults.map(m => m.current)
+      const dutyCycles = motorResults.map(m => m.dutyCycle)
+      battery.update(motorCurrents, slowDt, { dutyCycles, P_aux })
+      slowAccumulator = 0
     }
 
-    // ========== Integrate dynamics ==========
-    state = integrate(state, forces, dt, {
-      mass: totalMass,
-      inertia: [config.inertia[0], config.inertia[1], config.inertia[2]]
-    })
-
-    // ========== Update battery ==========
-    const motorCurrentSum = motorResults.reduce((s, r) => s + Math.abs(r.current), 0)
-    battery.update(motorCurrentSum, dt)
-
-    // ========== Log data ==========
+    // Log data
     if (simTime >= nextLogTime) {
+      const totalThrust = motorResults.reduce((s, r) => s + r.thrust, 0)
+      const motorCurrents = motorResults.map(r => r.current)
+      const dutyCycles = motorResults.map(r => r.dutyCycle)
+      const iBat = battery.computeBusCurrent(motorCurrents, dutyCycles, P_aux)
       result.time.push(simTime)
       result.position.push([...state.position])
       result.velocity.push([...state.velocity])
       result.quaternion.push([...state.quaternion])
       result.angularVelocity.push([...state.angularVelocity])
       result.motorSpeeds.push(motorResults.map(r => r.speed * 60 / (2 * Math.PI)))
-      result.motorCurrents.push(motorResults.map(r => r.current))
+      result.motorCurrents.push(motorCurrents)
       result.thrusts.push(motorResults.map(r => r.thrust))
       result.voltage.push(busVoltage)
-      result.current.push(motorCurrentSum)
-      result.power.push(busVoltage * motorCurrentSum)
+      result.current.push(iBat)
+      result.power.push(busVoltage * iBat)
       result.soc.push(battery.getSOC())
       result.totalThrust.push(totalThrust)
       result.refPosition.push([...setpoint.position])

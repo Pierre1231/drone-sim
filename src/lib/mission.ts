@@ -1,6 +1,12 @@
 export interface Setpoint {
   position: [number, number, number]
   velocity: [number, number, number]
+  /** Feedforward acceleration in NED (m/s^2). */
+  acceleration: [number, number, number]
+  /** Desired heading reference direction b_x,ref^n (unit vector). */
+  heading: [number, number, number]
+  /** Optional desired body angular velocity feedforward (rad/s). */
+  angularVelocity?: [number, number, number]
   landing: boolean
 }
 
@@ -22,34 +28,31 @@ export class HoverMission {
   }
 
   getSetpoint(time: number, batteryState?: { soc: number }): Setpoint {
-    // Check battery cutoff
     if (batteryState && batteryState.soc <= this.batteryCutoffSoc) {
-      return {
-        position: [0, 0, 0],
-        velocity: [0, 0, 0],
-        landing: true,
-      }
+      return { position: [0, 0, 0], velocity: [0, 0, 0], acceleration: [0, 0, 0], heading: [1, 0, 0], landing: true }
     }
 
     if (time < this.takeoffDuration) {
-      // Takeoff phase: smooth ascent
       const t = time / this.takeoffDuration
-      // Use smoothstep for smooth transition
       const smooth = t * t * (3 - 2 * t)
       const altitude = this.targetAltitude * smooth
       const velocityZ = this.targetAltitude * 6 * t * (1 - t) / this.takeoffDuration
+      const accelerationZ = this.targetAltitude * 6 * (1 - 2 * t) / (this.takeoffDuration * this.takeoffDuration)
 
       return {
-        position: [0, 0, -altitude], // NED: z positive = down, so altitude -> -z
+        position: [0, 0, -altitude],
         velocity: [0, 0, -velocityZ],
+        acceleration: [0, 0, -accelerationZ],
+        heading: [1, 0, 0],
         landing: false,
       }
     }
 
-    // Hover phase
     return {
-      position: [0, 0, -this.targetAltitude], // NED: z positive = down
+      position: [0, 0, -this.targetAltitude],
       velocity: [0, 0, 0],
+      acceleration: [0, 0, 0],
+      heading: [1, 0, 0],
       landing: false,
     }
   }
@@ -62,6 +65,24 @@ export interface CircleMissionParams {
   radius: number
   speed: number
   batteryCutoffSoc: number
+  angularRateFeedforward?: boolean
+}
+
+function normalize(v: [number, number, number]): [number, number, number] {
+  const n = Math.hypot(v[0], v[1], v[2])
+  return n > 1e-9 ? [v[0] / n, v[1] / n, v[2] / n] : [1, 0, 0]
+}
+
+function cross(a: [number, number, number], b: [number, number, number]): [number, number, number] {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ]
+}
+
+function dot(a: [number, number, number], b: [number, number, number]): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
 export class CircleMission {
@@ -71,7 +92,7 @@ export class CircleMission {
   private radius: number
   private speed: number
   private batteryCutoffSoc: number
-  private period: number
+  private angularRateFeedforward: boolean
 
   constructor(params: CircleMissionParams) {
     this.targetAltitude = params.targetAltitude
@@ -80,126 +101,57 @@ export class CircleMission {
     this.radius = params.radius
     this.speed = params.speed
     this.batteryCutoffSoc = params.batteryCutoffSoc
-    // Circle circumference = 2πr, period = circumference / speed
-    this.period = (2 * Math.PI * this.radius) / this.speed
+    this.angularRateFeedforward = params.angularRateFeedforward ?? false
   }
 
   getSetpoint(time: number, batteryState?: { soc: number }): Setpoint {
-    // Check battery cutoff
     if (batteryState && batteryState.soc <= this.batteryCutoffSoc) {
-      return {
-        position: [0, 0, 0],
-        velocity: [0, 0, 0],
-        landing: true,
-      }
+      return { position: [0, 0, 0], velocity: [0, 0, 0], acceleration: [0, 0, 0], heading: [1, 0, 0], landing: true }
     }
 
     if (time < this.takeoffDuration) {
-      // Takeoff phase
       const t = time / this.takeoffDuration
       const smooth = t * t * (3 - 2 * t)
       const altitude = this.targetAltitude * smooth
       const velocityZ = this.targetAltitude * 6 * t * (1 - t) / this.takeoffDuration
-
-      return {
-        position: [0, 0, -altitude], // NED: z positive = down
-        velocity: [0, 0, -velocityZ],
-        landing: false,
-      }
+      const accelerationZ = this.targetAltitude * 6 * (1 - 2 * t) / (this.takeoffDuration * this.takeoffDuration)
+      return { position: [0, 0, -altitude], velocity: [0, 0, -velocityZ], acceleration: [0, 0, -accelerationZ], heading: [1, 0, 0], landing: false }
     }
 
     if (time < this.takeoffDuration + this.hoverDuration) {
-      // Hover phase
-      return {
-        position: [0, 0, -this.targetAltitude], // NED: z positive = down
-        velocity: [0, 0, 0],
-        landing: false,
-      }
+      return { position: [0, 0, -this.targetAltitude], velocity: [0, 0, 0], acceleration: [0, 0, 0], heading: [1, 0, 0], landing: false }
     }
 
-    // Circle phase
     const circleTime = time - this.takeoffDuration - this.hoverDuration
-    const omega = (2 * Math.PI) / this.period
+    const omega = this.speed / this.radius
     const theta = omega * circleTime
-
-    // Circle: x = a*cos(θ), y = a*sin(θ)
     const x = this.radius * Math.cos(theta)
     const y = this.radius * Math.sin(theta)
-
-    // Velocity: derivative of position
-    // x = a·cos(θ) → vx = -a·ω·sin(θ)
-    // y = a·sin(θ) → vy =  a·ω·cos(θ)
     const vx = -this.radius * omega * Math.sin(theta)
     const vy = this.radius * omega * Math.cos(theta)
+    const ax = -omega * omega * x
+    const ay = -omega * omega * y
+    const horizontalSpeed = Math.hypot(vx, vy)
+    const heading: [number, number, number] = horizontalSpeed > 1e-6
+      ? [vx / horizontalSpeed, vy / horizontalSpeed, 0]
+      : [1, 0, 0]
+
+    const desiredForce = [ax, ay, -9.81] as [number, number, number]
+    const bT = normalize(desiredForce)
+    const bz = [-bT[0], -bT[1], -bT[2]] as [number, number, number]
+    const by = normalize(cross(bz, heading))
+    const bx = normalize(cross(by, bz))
+    const omegaNed = [0, 0, omega] as [number, number, number]
+    const angularVelocity = [dot(bx, omegaNed), dot(by, omegaNed), dot(bz, omegaNed)] as [number, number, number]
 
     return {
-      position: [x, y, -this.targetAltitude], // NED: z positive = down
+      position: [x, y, -this.targetAltitude],
       velocity: [vx, vy, 0],
+      acceleration: [ax, ay, 0],
+      heading,
+      angularVelocity: this.angularRateFeedforward ? angularVelocity : undefined,
       landing: false,
     }
-  }
-}
-
-export interface Figure8MissionParams {
-  targetAltitude: number
-  takeoffDuration: number
-  hoverDuration: number
-  radius: number
-  speed: number
-  batteryCutoffSoc: number
-}
-
-export class Figure8Mission {
-  private targetAltitude: number
-  private takeoffDuration: number
-  private hoverDuration: number
-  private radius: number
-  private speed: number
-  private batteryCutoffSoc: number
-  private period: number
-
-  constructor(params: Figure8MissionParams) {
-    this.targetAltitude = params.targetAltitude
-    this.takeoffDuration = params.takeoffDuration
-    this.hoverDuration = params.hoverDuration
-    this.radius = params.radius
-    this.speed = params.speed
-    this.batteryCutoffSoc = params.batteryCutoffSoc
-    // For x = a·cos(θ), y = a·sin(2θ), max speed ≈ a·ω·√5
-    this.period = (2 * Math.PI * this.radius * Math.sqrt(5)) / this.speed
-  }
-
-  getSetpoint(time: number, batteryState?: { soc: number }): Setpoint {
-    if (batteryState && batteryState.soc <= this.batteryCutoffSoc) {
-      return { position: [0, 0, 0], velocity: [0, 0, 0], landing: true }
-    }
-
-    if (time < this.takeoffDuration) {
-      const t = time / this.takeoffDuration
-      const smooth = t * t * (3 - 2 * t)
-      const altitude = this.targetAltitude * smooth
-      const velocityZ = this.targetAltitude * 6 * t * (1 - t) / this.takeoffDuration
-      return { position: [0, 0, -altitude], velocity: [0, 0, -velocityZ], landing: false }
-    }
-
-    if (time < this.takeoffDuration + this.hoverDuration) {
-      return { position: [0, 0, -this.targetAltitude], velocity: [0, 0, 0], landing: false }
-    }
-
-    const figure8Time = time - this.takeoffDuration - this.hoverDuration
-    const omega = (2 * Math.PI) / this.period
-    const theta = omega * figure8Time
-
-    // Figure-8: x = a·cos(θ), y = a·sin(2θ)
-    const x = this.radius * Math.cos(theta)
-    const y = this.radius * Math.sin(2 * theta)
-
-    // Velocity: x = a·cos(θ) → vx = -a·ω·sin(θ)
-    //          y = a·sin(2θ) → vy = 2a·ω·cos(2θ)
-    const vx = -this.radius * omega * Math.sin(theta)
-    const vy = 2 * this.radius * omega * Math.cos(2 * theta)
-
-    return { position: [x, y, -this.targetAltitude], velocity: [vx, vy, 0], landing: false }
   }
 }
 
@@ -228,7 +180,7 @@ export class FullSpeedMission {
 
   getSetpoint(time: number, batteryState?: { soc: number }): Setpoint {
     if (batteryState && batteryState.soc <= this.batteryCutoffSoc) {
-      return { position: [0, 0, 0], velocity: [0, 0, 0], landing: true }
+      return { position: [0, 0, 0], velocity: [0, 0, 0], acceleration: [0, 0, 0], heading: [1, 0, 0], landing: true }
     }
 
     if (time < this.takeoffDuration) {
@@ -236,19 +188,20 @@ export class FullSpeedMission {
       const smooth = t * t * (3 - 2 * t)
       const altitude = this.targetAltitude * smooth
       const velocityZ = this.targetAltitude * 6 * t * (1 - t) / this.takeoffDuration
-      return { position: [0, 0, -altitude], velocity: [0, 0, -velocityZ], landing: false }
+      const accelerationZ = this.targetAltitude * 6 * (1 - 2 * t) / (this.takeoffDuration * this.takeoffDuration)
+      return { position: [0, 0, -altitude], velocity: [0, 0, -velocityZ], acceleration: [0, 0, -accelerationZ], heading: [1, 0, 0], landing: false }
     }
 
     if (time < this.takeoffDuration + this.hoverDuration) {
-      return { position: [0, 0, -this.targetAltitude], velocity: [0, 0, 0], landing: false }
+      return { position: [0, 0, -this.targetAltitude], velocity: [0, 0, 0], acceleration: [0, 0, 0], heading: [1, 0, 0], landing: false }
     }
 
     const cruiseTime = time - this.takeoffDuration - this.hoverDuration
-    const x = this.speed * cruiseTime
-
     return {
-      position: [x, 0, -this.targetAltitude],
+      position: [this.speed * cruiseTime, 0, -this.targetAltitude],
       velocity: [this.speed, 0, 0],
+      acceleration: [0, 0, 0],
+      heading: [1, 0, 0],
       landing: false,
     }
   }
