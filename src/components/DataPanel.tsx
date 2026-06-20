@@ -1,366 +1,368 @@
-import { useSimStore } from '@/store/simStore'
 import { useState } from 'react'
 import ReactECharts from 'echarts-for-react'
-import { CheckCircle, XCircle } from 'lucide-react'
+import type { EChartsOption } from 'echarts'
+import { AlertCircle, CheckCircle, XCircle } from 'lucide-react'
+import { useSimStore } from '@/store/simStore'
+import type { SimResult } from '@/lib/simulation'
+
+type TabKey = 'comparison' | 'summary' | 'charts'
+type Verdict = 'pass' | 'warn' | 'fail'
+
+interface CompareRow {
+  metric: string
+  expected: string
+  actual: string
+  error: string
+  tolerance: string
+  verdict: Verdict
+}
+
+function average(values: number[]): number {
+  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function maxBy<T>(values: T[], selector: (value: T) => number): number {
+  let max = -Infinity
+  for (const value of values) max = Math.max(max, selector(value))
+  return max
+}
+
+function distance(a: number[], b: number[]): number {
+  return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+}
+
+function firstIndexAtOrAfter(time: number[], target: number): number {
+  const idx = time.findIndex(t => t >= target)
+  return idx >= 0 ? idx : time.length - 1
+}
+
+function sliceByTime<T>(result: SimResult, values: T[], start: number, end: number): T[] {
+  const startIdx = firstIndexAtOrAfter(result.time, start)
+  const endIdx = firstIndexAtOrAfter(result.time, end)
+  return values.slice(startIdx, Math.max(startIdx + 1, endIdx))
+}
+
+function verdictForAbsError(error: number, tolerance: number): Verdict {
+  if (error <= tolerance) return 'pass'
+  if (error <= tolerance * 2) return 'warn'
+  return 'fail'
+}
+
+function fmt(value: number, unit = ''): string {
+  return `${value.toFixed(3)}${unit ? ` ${unit}` : ''}`
+}
+
+function makeRow(metric: string, actual: number, expected: number, tolerance: number, unit = ''): CompareRow {
+  const error = actual - expected
+  return {
+    metric,
+    expected: fmt(expected, unit),
+    actual: fmt(actual, unit),
+    error: `${error >= 0 ? '+' : ''}${fmt(error, unit)}`,
+    tolerance: `±${tolerance}${unit ? ` ${unit}` : ''}`,
+    verdict: verdictForAbsError(Math.abs(error), tolerance),
+  }
+}
+
+function cutoffIndex(result: SimResult): number {
+  const idx = result.soc.findIndex(s => s <= 0.2)
+  return idx >= 0 ? idx : result.time.length - 1
+}
+
+function compareHover(result: SimResult): CompareRow[] {
+  const idx600 = firstIndexAtOrAfter(result.time, 600)
+  const idxCutoff = cutoffIndex(result)
+  const stablePower = average(sliceByTime(result, result.power, 20, 120))
+  const stableThrust = average(sliceByTime(result, result.totalThrust, 20, 120))
+
+  return [
+    makeRow('稳态电池功率', stablePower, 339.373061, 8, 'W'),
+    makeRow('稳态总推力', stableThrust, 14.715, 0.5, 'N'),
+    makeRow('600 s 后 SOC', result.soc[idx600], 0.697615, 0.02),
+    makeRow('到 SOC=20% 的时间', result.time[idxCutoff], 1491.0, 120, 's'),
+    makeRow('SOC=20% 时电压', result.voltage[idxCutoff], 19.6740, 0.7, 'V'),
+    makeRow('SOC=20% 时电流', result.current[idxCutoff], 17.2498, 1.0, 'A'),
+  ]
+}
+
+function compareFullSpeed(result: SimResult): CompareRow[] {
+  const idx600 = firstIndexAtOrAfter(result.time, 600)
+  const idxCutoff = cutoffIndex(result)
+  const power = average(sliceByTime(result, result.power, 20, 120))
+
+  return [
+    makeRow('稳态电池功率', power, 341.223962, 8, 'W'),
+    makeRow('600 s 后 SOC', result.soc[idx600], 0.695826, 0.02),
+    makeRow('到 SOC=20% 的时间', result.time[idxCutoff], 1482.5, 120, 's'),
+    makeRow('SOC=20% 时电压', result.voltage[idxCutoff], 19.6670, 0.7, 'V'),
+    makeRow('SOC=20% 时电流', result.current[idxCutoff], 17.3500, 1.0, 'A'),
+  ]
+}
+
+function compareCircle(result: SimResult, targetSpeed: 2 | 7): CompareRow[] {
+  const start = targetSpeed === 2 ? 10 : 20
+  const end = Math.min(120, result.time[result.time.length - 1])
+  const powers = sliceByTime(result, result.power, start, end)
+  const power = average(powers)
+  const expectedPower = targetSpeed === 2 ? 341.294069 : 578.013196
+  const expectedSoc600 = targetSpeed === 2 ? 0.695758 : 0.449874
+  const expectedEndurance = targetSpeed === 2 ? 1482.1 : 842.6
+  const idxCutoff = cutoffIndex(result)
+  const idx600 = firstIndexAtOrAfter(result.time, 600)
+
+  return [
+    makeRow('稳态电池功率', power, expectedPower, targetSpeed === 2 ? 8 : 30, 'W'),
+    makeRow('600 s 后 SOC', result.soc[idx600], expectedSoc600, targetSpeed === 2 ? 0.02 : 0.04),
+    makeRow('到 SOC=20% 的时间', result.time[idxCutoff], expectedEndurance, targetSpeed === 2 ? 120 : 80, 's'),
+  ]
+}
+
+function buildComparison(missionType: string | null, result: SimResult): { title: string; rows: CompareRow[]; note: string } {
+  if (missionType === 'test-hover' || missionType === 'hover') {
+    return {
+      title: 'B01 全链路悬停',
+      rows: compareHover(result),
+      note: '对照《四旋翼仿真测试用例.md》B01：5 m 悬停、6S 8Ah、电池截止 SOC=20%。',
+    }
+  }
+  if (missionType === 'fullspeed') {
+    return {
+      title: 'B02 水平匀速 5 m/s',
+      rows: compareFullSpeed(result),
+      note: '对照《四旋翼仿真测试用例.md》B02 输出表：稳态 Pbat、SOC(600s)、SOC20 时间、电压和电流。',
+    }
+  }
+  if (missionType === 'test-circle' || missionType === 'circle') {
+    return {
+      title: 'B03 圆形轨迹 2 m/s',
+      rows: compareCircle(result, 2),
+      note: '只判定文档 B03 表格中明确给出的输出：稳态 Pbat、SOC(600s)、到 SOC=20% 的时间。',
+    }
+  }
+  if (missionType === 'test-circle-7') {
+    return {
+      title: 'B03 圆形轨迹 7 m/s',
+      rows: compareCircle(result, 7),
+      note: '只判定文档 B03 表格中明确给出的输出：稳态 Pbat、SOC(600s)、到 SOC=20% 的时间。',
+    }
+  }
+  return {
+    title: '未匹配文档工况',
+    rows: [],
+    note: '请选择 B01 悬停、B02 5m/s 直线、B03 圆轨迹 2m/s 或 B03 圆轨迹 7m/s 后运行仿真。',
+  }
+}
+
+function makeChartOption(time: number[], data: number[], unit: string, color: string): EChartsOption {
+  return {
+    grid: { top: 24, right: 18, bottom: 30, left: 52 },
+    xAxis: { type: 'value', name: 't (s)', nameLocation: 'middle', nameGap: 22 },
+    yAxis: { type: 'value', name: unit },
+    series: [{
+      data: time.map((t, i) => [t, data[i]]),
+      type: 'line',
+      smooth: true,
+      showSymbol: false,
+      lineStyle: { width: 2, color },
+      areaStyle: { opacity: 0.12, color },
+    }],
+    tooltip: { trigger: 'axis' },
+    animation: false,
+  } as EChartsOption
+}
 
 export default function DataPanel() {
   const { status, result, missionType } = useSimStore()
-  const [activeTab, setActiveTab] = useState<'summary' | 'charts' | 'dashboard'>('summary')
+  const [activeTab, setActiveTab] = useState<TabKey>('comparison')
 
-  if (status !== 'complete' || !result) {
-    return (
-      <div style={{
-        height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--text-secondary)', fontSize: 14,
-      }}
-      >
-        <p>仿真完成后显示数据</p>
-      </div>
-    )
+  if (status !== 'complete' || !result || result.time.length === 0) {
+    return <div style={emptyStyle}>仿真完成后，这里会显示与文档测试用例的对比结果。</div>
   }
 
   const lastIdx = result.time.length - 1
   const flightTime = result.time[lastIdx]
-  const maxAlt = Math.max(...result.position.map(p => -p[2]))
   const finalSoc = result.soc[lastIdx]
-  const avgPower = result.power.reduce((a, b) => a + b, 0) / result.power.length
-  const maxSpeed = Math.max(...result.velocity.map(v => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)))
+  const avgPower = average(result.power)
+  const maxAltitude = maxBy(result.position, p => -p[2])
+  const maxSpeed = maxBy(result.velocity, v => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2))
+  const totalDistance = result.position.reduce((sum, p, i) => i === 0 ? 0 : sum + distance(p, result.position[i - 1]), 0)
+  const comparison = buildComparison(missionType, result)
+  const passCount = comparison.rows.filter(row => row.verdict === 'pass').length
+  const hasFail = comparison.rows.some(row => row.verdict === 'fail')
+  const hasWarn = comparison.rows.some(row => row.verdict === 'warn')
 
-  const totalDist = result.position.reduce((sum, p, i) => {
-    if (i === 0) return 0
-    const prev = result.position[i - 1]
-    return sum + Math.sqrt((p[0] - prev[0]) ** 2 + (p[1] - prev[1]) ** 2 + (p[2] - prev[2]) ** 2)
-  }, 0)
-
-  const tabs = [
-    { key: 'summary' as const, label: '汇总报告' },
-    { key: 'dashboard' as const, label: '仪表盘' },
-    { key: 'charts' as const, label: '图表' },
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'comparison', label: '文档对比' },
+    { key: 'summary', label: '仿真概览' },
+    { key: 'charts', label: '时间曲线' },
   ]
 
   return (
     <div>
-      {/* Tab Bar */}
-      <div style={{
-        display: 'flex', gap: 'var(--space-1)', marginBottom: 'var(--space-6)',
-        padding: 'var(--space-1)', background: 'oklch(96% 0.005 250)',
-        borderRadius: 'var(--radius-lg)', width: 'fit-content',
-      }}
-      >
+      <div style={tabBarStyle}>
         {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: 'var(--space-3) var(--space-5)', border: 'none',
-              background: activeTab === tab.key ? 'var(--bg-surface)' : 'transparent',
-              color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontSize: 14, fontWeight: 500, borderRadius: 'var(--radius-md)',
-              cursor: 'pointer', transition: 'all 0.15s ease', fontFamily: 'var(--font-body)',
-              boxShadow: activeTab === tab.key ? 'var(--shadow-sm)' : 'none',
-            }}
-          >
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={tabStyle(activeTab === tab.key)}>
             {tab.label}
           </button>
         ))}
       </div>
 
-      {activeTab === 'summary' && (
-        <>
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-5)', color: 'var(--text-primary)' }}
-          >
-            飞行汇总报告
-          </h3>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 'var(--space-5)', marginBottom: 'var(--space-10)',
-          }}
-          >
-            <SummaryCard label="总飞行时间" value={`${(flightTime / 60).toFixed(1)} min`} />
-            <SummaryCard label="总距离" value={`${totalDist.toFixed(1)} m`} />
-            <SummaryCard label="平均功率" value={`${avgPower.toFixed(0)} W`} />
-            <SummaryCard label="最大高度" value={`${maxAlt.toFixed(1)} m`} />
-            <SummaryCard label="最大速度" value={`${maxSpeed.toFixed(1)} m/s`} />
-            <SummaryCard label="剩余电量" value={`${(finalSoc * 100).toFixed(0)}%`} />
+      {activeTab === 'comparison' && (
+        <section>
+          <div style={comparisonHeaderStyle}>
+            <div>
+              <h3 style={headingStyle}>{comparison.title}</h3>
+              <p style={subtleTextStyle}>{comparison.note}</p>
+            </div>
+            {comparison.rows.length > 0 && (
+              <StatusPill verdict={hasFail ? 'fail' : hasWarn ? 'warn' : 'pass'}>
+                {passCount}/{comparison.rows.length} 项通过
+              </StatusPill>
+            )}
           </div>
 
-          {/* 理论参考值对比 */}
-          {missionType && ['test-hover', 'test-circle', 'test-figure8'].includes(missionType) && result && (
-            <TheoryComparison missionType={missionType} result={result} />
+          {comparison.rows.length === 0 ? (
+            <div style={emptyStyle}>{comparison.note}</div>
+          ) : (
+            <div style={tableWrapStyle}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'oklch(97% 0.005 250)' }}>
+                    <th style={thStyle}>指标</th>
+                    <th style={thStyle}>文档期望</th>
+                    <th style={thStyle}>仿真实际</th>
+                    <th style={thStyle}>偏差</th>
+                    <th style={thStyle}>容差</th>
+                    <th style={thStyle}>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparison.rows.map(row => (
+                    <tr key={row.metric} style={{ borderTop: '1px solid var(--border-default)' }}>
+                      <td style={tdStyle}>{row.metric}</td>
+                      <td style={monoTdStyle}>{row.expected}</td>
+                      <td style={monoTdStyle}>{row.actual}</td>
+                      <td style={monoTdStyle}>{row.error}</td>
+                      <td style={monoTdStyle}>{row.tolerance}</td>
+                      <td style={tdStyle}><InlineStatus verdict={row.verdict} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </>
+        </section>
       )}
 
-      {activeTab === 'dashboard' && (
-        <>
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-5)', color: 'var(--text-primary)' }}
-          >
-            基本信息概览
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)', marginBottom: 'var(--space-10)' }}
-          >
-            <div style={{
-              background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-              borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)',
-            }}
-            >
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-4)' }}
-              >
-                基本信息
-              </h4>
-              <BarItem label="续航时间" value={flightTime / 60} max={30} unit="min" color="#3b82f6" />
-              <BarItem label="剩余电量" value={finalSoc * 100} max={100} unit="%" color="#22c55e" />
-              <BarItem label="最大速度" value={maxSpeed} max={20} unit="m/s" color="#f97316" />
-              <BarItem label="平均功率" value={avgPower} max={500} unit="W" color="#a855f7" />
-            </div>
-
+      {activeTab === 'summary' && (
+        <section>
+          <h3 style={headingStyle}>仿真概览</h3>
+          <div style={summaryGridStyle}>
+            <SummaryCard label="仿真时长" value={`${(flightTime / 60).toFixed(1)} min`} />
+            <SummaryCard label="飞行距离" value={`${totalDistance.toFixed(1)} m`} />
+            <SummaryCard label="平均功率" value={`${avgPower.toFixed(0)} W`} />
+            <SummaryCard label="最高高度" value={`${maxAltitude.toFixed(1)} m`} />
+            <SummaryCard label="最大速度" value={`${maxSpeed.toFixed(1)} m/s`} />
+            <SummaryCard label="剩余电量" value={`${(finalSoc * 100).toFixed(1)}%`} />
           </div>
-
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-5)', color: 'var(--text-primary)' }}
-          >
-            整体性能
-          </h3>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: 'var(--space-5)', marginBottom: 'var(--space-10)',
-          }}
-          >
-            <PerformanceCard label="总飞行时间" value={`${(flightTime / 60).toFixed(1)} min`} />
-            <PerformanceCard label="总飞行距离" value={`${totalDist.toFixed(1)} m`} />
-            <PerformanceCard label="平均功率消耗" value={`${avgPower.toFixed(0)} W`} />
-            <PerformanceCard label="最大高度" value={`${maxAlt.toFixed(1)} m`} />
-            <PerformanceCard label="最大速度" value={`${maxSpeed.toFixed(1)} m/s`} />
-            <PerformanceCard label="最终剩余电量" value={`${(finalSoc * 100).toFixed(0)}%`} />
-          </div>
-        </>
+        </section>
       )}
 
       {activeTab === 'charts' && (
-        <>
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-5)', color: 'var(--text-primary)' }}
-          >
-            时间序列分析
-          </h3>
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)',
-          }}
-          >
+        <section>
+          <h3 style={headingStyle}>时间曲线</h3>
+          <div style={chartGridStyle}>
             <ChartCard title="电压" option={makeChartOption(result.time, result.voltage, 'V', '#3b82f6')} />
-            <ChartCard title="高度" option={makeChartOption(result.time, result.position.map(p => -p[2]), 'm', '#22c55e')} />
+            <ChartCard title="电流" option={makeChartOption(result.time, result.current, 'A', '#14b8a6')} />
             <ChartCard title="功率" option={makeChartOption(result.time, result.power, 'W', '#f97316')} />
-            <ChartCard title="推力" option={makeChartOption(result.time, result.totalThrust, 'N', '#a855f7')} />
+            <ChartCard title="高度" option={makeChartOption(result.time, result.position.map(p => -p[2]), 'm', '#22c55e')} />
+            <ChartCard title="总推力" option={makeChartOption(result.time, result.totalThrust, 'N', '#8b5cf6')} />
+            <ChartCard title="SOC" option={makeChartOption(result.time, result.soc.map(s => s * 100), '%', '#64748b')} />
           </div>
-        </>
+        </section>
       )}
     </div>
   )
 }
 
-function makeChartOption(time: number[], data: number[], unit: string, color: string) {
-  return {
-    grid: { top: 30, right: 20, bottom: 30, left: 50 },
-    xAxis: { type: 'category', data: time.map(t => (t / 60).toFixed(1)), show: false },
-    yAxis: { type: 'value', name: unit },
-    series: [{
-      data, type: 'line', smooth: true,
-      areaStyle: { opacity: 0.2 },
-      itemStyle: { color },
-      lineStyle: { width: 2 },
-    }],
-    tooltip: { trigger: 'axis' },
-  }
+function InlineStatus({ verdict }: { verdict: Verdict }) {
+  if (verdict === 'pass') return <span style={statusTextStyle('#16a34a')}><CheckCircle size={14} />通过</span>
+  if (verdict === 'warn') return <span style={statusTextStyle('#ca8a04')}><AlertCircle size={14} />接近边界</span>
+  return <span style={statusTextStyle('#dc2626')}><XCircle size={14} />偏差较大</span>
+}
+
+function StatusPill({ verdict, children }: { verdict: Verdict; children: React.ReactNode }) {
+  const color = verdict === 'pass' ? '#16a34a' : verdict === 'warn' ? '#ca8a04' : '#dc2626'
+  const background = verdict === 'pass' ? 'oklch(96% 0.04 145)' : verdict === 'warn' ? 'oklch(96% 0.05 85)' : 'oklch(96% 0.04 25)'
+  return <span style={{ color, background, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700 }}>{children}</span>
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{
-      background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-      borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)',
-      display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
-    }}
-    >
-      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
+    <div style={summaryCardStyle}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
     </div>
   )
 }
 
-function PerformanceCard({ label, value }: { label: string; value: string }) {
+function ChartCard({ title, option }: { title: string; option: EChartsOption }) {
   return (
-    <div style={{
-      background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-      borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)',
-      display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
-    }}
-    >
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
+    <div style={chartCardStyle}>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 8 }}>{title}</div>
+      <ReactECharts option={option} style={{ height: 230 }} />
     </div>
   )
 }
 
-function ChartCard({ title, option }: { title: string; option: any }) {
-  return (
-    <div style={{
-      background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-      borderRadius: 'var(--radius-xl)', padding: 'var(--space-4)',
-    }}
-    >
-      <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 'var(--space-2)' }}>{title}</div>
-      <ReactECharts option={option} style={{ height: 200 }} />
-    </div>
-  )
+const emptyStyle: React.CSSProperties = {
+  minHeight: 220,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--text-secondary)',
+  fontSize: 14,
+  border: '1px dashed var(--border-default)',
+  borderRadius: 'var(--radius-lg)',
+  background: 'var(--bg-surface)',
 }
 
-function BarItem({ label, value, max, unit, color }: { label: string; value: number; max: number; unit: string; color: string }) {
-  const pct = Math.min(100, (value / max) * 100)
-  return (
-    <div style={{ marginBottom: 'var(--space-3)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 'var(--space-1)' }}>
-        <span>{label}</span>
-        <span>{value.toFixed(1)} {unit}</span>
-      </div>
-      <div style={{ width: '100%', height: 8, background: 'oklch(94% 0.005 250)', borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', borderRadius: 4, transition: 'width 0.6s ease',
-          width: `${pct}%`, background: color,
-        }} />
-      </div>
-    </div>
-  )
+const tabBarStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 4,
+  marginBottom: 24,
+  padding: 4,
+  background: 'oklch(96% 0.005 250)',
+  borderRadius: 8,
+  width: 'fit-content',
 }
 
-/* -------------------- 理论参考值对比 -------------------- */
-
-function TheoryComparison({ missionType, result }: { missionType: string; result: any }) {
-  const last = result.time.length - 1
-
-  let rows: { label: string; theory: string; actual: string; ok: boolean }[] = []
-
-  if (missionType === 'hover' || missionType === 'test-hover') {
-    // 提取悬停稳定段（time 15~25 s，跳过 takeoff 超调）
-    const hoverStart = result.time.findIndex((t: number) => t >= 15)
-    const hoverEnd = result.time.findIndex((t: number) => t >= 25)
-    const endIdx = hoverEnd > 0 ? hoverEnd : Math.min(last + 1, hoverStart + 100)
-    const hoverThrusts = result.totalThrust.slice(hoverStart, endIdx)
-    const hoverAlts = result.position.slice(hoverStart, endIdx).map((p: number[]) => -p[2])
-    const avgThrust = hoverThrusts.reduce((a: number, b: number) => a + b, 0) / hoverThrusts.length
-    const avgAlt = hoverAlts.reduce((a: number, b: number) => a + b, 0) / hoverAlts.length
-
-    const isTest = missionType.startsWith('test')
-    rows = [
-      { label: '悬停高度', theory: '10.0 m', actual: `${avgAlt.toFixed(1)} m`, ok: Math.abs(avgAlt - 10) < 1.0 },
-      { label: '悬停推力', theory: isTest ? '14.72 N' : '~14.7 N', actual: `${avgThrust.toFixed(2)} N`, ok: Math.abs(avgThrust - 14.715) < 0.5 },
-      { label: '飞行时间', theory: isTest ? '14.68 min' : '~10–15 min', actual: `${(result.time[last] / 60).toFixed(2)} min`, ok: Math.abs(result.time[last] - 880.7) < 60 },
-      { label: '末态 SOC', theory: '20.0%', actual: `${(result.soc[last] * 100).toFixed(1)}%`, ok: Math.abs(result.soc[last] - 0.2) < 0.02 },
-      { label: '末态电压', theory: isTest ? '12.78 V' : '~12.8 V', actual: `${result.voltage[last].toFixed(2)} V`, ok: Math.abs(result.voltage[last] - 12.776) < 0.5 },
-    ]
-  } else {
-    // 提取稳定段数据（跳过 takeoff + hover）
-    const stableStart = result.time.findIndex((t: number) => t >= 10)
-    const stableEnd = result.time.findIndex((t: number) => t >= 60)
-    const endIdx = stableEnd > 0 ? stableEnd : result.time.length
-    const positions = result.position.slice(stableStart, endIdx)
-    const vels = result.velocity.slice(stableStart, endIdx)
-
-    const avgSpeed = vels.length > 0
-      ? vels.reduce((s: number, v: number[]) => s + Math.sqrt(v[0] ** 2 + v[1] ** 2), 0) / vels.length
-      : 0
-
-    const xs = positions.map((p: number[]) => p[0])
-    const ys = positions.map((p: number[]) => p[1])
-    const rx = xs.length > 0 ? (Math.max(...xs) - Math.min(...xs)) / 2 : 0
-    const ry = ys.length > 0 ? (Math.max(...ys) - Math.min(...ys)) / 2 : 0
-    const rAvg = (rx + ry) / 2
-
-    const ac = rAvg > 0 ? (avgSpeed * avgSpeed) / rAvg : 0
-    const theta = Math.atan(ac / 9.81) * (180 / Math.PI)
-    const totalThrust = 1.5 * Math.sqrt(9.81 ** 2 + ac ** 2)
-
-    if (missionType === 'circle' || missionType === 'test-circle') {
-      rows = [
-        { label: '平均速度', theory: '2.00 m/s', actual: `${avgSpeed.toFixed(2)} m/s`, ok: Math.abs(avgSpeed - 2) < 0.5 },
-        { label: '轨迹半径', theory: '5.00 m', actual: `${rAvg.toFixed(2)} m`, ok: Math.abs(rAvg - 5) < 0.5 },
-        { label: '向心加速度', theory: '0.80 m/s²', actual: `${ac.toFixed(2)} m/s²`, ok: Math.abs(ac - 0.8) < 0.1 },
-        { label: '倾斜角', theory: '4.66°', actual: `${theta.toFixed(2)}°`, ok: Math.abs(theta - 4.66) < 1.0 },
-        { label: '合推力大小', theory: '14.76 N', actual: `${totalThrust.toFixed(2)} N`, ok: Math.abs(totalThrust - 14.76) < 0.5 },
-        { label: '周期', theory: '15.71 s', actual: `${((2 * Math.PI * rAvg) / Math.max(avgSpeed, 0.1)).toFixed(2)} s`, ok: true },
-      ]
-    } else if (missionType === 'figure8') {
-      rows = [
-        { label: '平均速度', theory: '2.00 m/s', actual: `${avgSpeed.toFixed(2)} m/s`, ok: Math.abs(avgSpeed - 2) < 0.5 },
-        { label: '轨迹半径', theory: '5.00 m', actual: `${rAvg.toFixed(2)} m`, ok: Math.abs(rAvg - 5) < 0.5 },
-        { label: '最大横向加速度', theory: '0.80 m/s²', actual: `${ac.toFixed(2)} m/s²`, ok: Math.abs(ac - 0.8) < 0.2 },
-        { label: '倾斜角', theory: '4.66°', actual: `${theta.toFixed(2)}°`, ok: Math.abs(theta - 4.66) < 1.2 },
-        { label: '合推力大小', theory: '14.76 N', actual: `${totalThrust.toFixed(2)} N`, ok: Math.abs(totalThrust - 14.76) < 0.5 },
-        { label: '周期', theory: '22.21 s', actual: `${((2 * Math.PI * rAvg) / Math.max(avgSpeed, 0.1)).toFixed(2)} s`, ok: true },
-      ]
-    } else {
-      // test-figure8
-      rows = [
-        { label: '平均速度', theory: '5.00 m/s', actual: `${avgSpeed.toFixed(2)} m/s`, ok: Math.abs(avgSpeed - 5) < 1.0 },
-        { label: '轨迹半径', theory: '5.00 m', actual: `${rAvg.toFixed(2)} m`, ok: Math.abs(rAvg - 5) < 0.5 },
-        { label: '最大横向加速度', theory: '5.00 m/s²', actual: `${ac.toFixed(2)} m/s²`, ok: Math.abs(ac - 5.0) < 1.0 },
-        { label: '倾斜角', theory: '27.0°', actual: `${theta.toFixed(2)}°`, ok: Math.abs(theta - 27.0) < 3.0 },
-        { label: '合推力大小', theory: '16.52 N', actual: `${totalThrust.toFixed(2)} N`, ok: Math.abs(totalThrust - 16.52) < 1.0 },
-        { label: '周期', theory: '12.57 s', actual: `${((2 * Math.PI * rAvg) / Math.max(avgSpeed, 0.1)).toFixed(2)} s`, ok: true },
-      ]
-    }
+function tabStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '10px 16px',
+    border: 'none',
+    borderRadius: 8,
+    background: active ? 'var(--bg-surface)' : 'transparent',
+    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    boxShadow: active ? 'var(--shadow-sm)' : 'none',
   }
-
-  return (
-    <>
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-5)', color: 'var(--text-primary)' }}>
-        理论参考值对比
-      </h3>
-      <div style={{
-        background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-xl)', overflow: 'hidden', marginBottom: 'var(--space-10)',
-      }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: 'oklch(97% 0.005 250)' }}>
-              <th style={thStyle}>指标</th>
-              <th style={thStyle}>理论参考值</th>
-              <th style={thStyle}>仿真实际值</th>
-              <th style={thStyle}>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid var(--border-default)' }}>
-                <td style={tdStyle}>{row.label}</td>
-                <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{row.theory}</td>
-                <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{row.actual}</td>
-                <td style={tdStyle}>
-                  {row.ok ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#22c55e', fontWeight: 600 }}>
-                      <CheckCircle size={14} /> 通过
-                    </span>
-                  ) : (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', fontWeight: 600 }}>
-                      <XCircle size={14} /> 偏差
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  )
 }
 
-const thStyle: React.CSSProperties = {
-  padding: 'var(--space-3) var(--space-4)',
-  textAlign: 'left', fontSize: 12, fontWeight: 600,
-  color: 'var(--text-secondary)', textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-}
+const headingStyle: React.CSSProperties = { fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }
+const subtleTextStyle: React.CSSProperties = { margin: '6px 0 0', fontSize: 13, color: 'var(--text-secondary)' }
+const comparisonHeaderStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 16 }
+const tableWrapStyle: React.CSSProperties = { background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 8, overflowX: 'auto' }
+const thStyle: React.CSSProperties = { padding: '12px 14px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }
+const tdStyle: React.CSSProperties = { padding: '12px 14px', fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap' }
+const monoTdStyle: React.CSSProperties = { ...tdStyle, fontFamily: 'var(--font-mono)' }
+const summaryGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }
+const summaryCardStyle: React.CSSProperties = { background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 18, display: 'flex', flexDirection: 'column', gap: 6 }
+const chartGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }
+const chartCardStyle: React.CSSProperties = { background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 16 }
 
-const tdStyle: React.CSSProperties = {
-  padding: 'var(--space-3) var(--space-4)',
-  fontSize: 14, color: 'var(--text-primary)',
+function statusTextStyle(color: string): React.CSSProperties {
+  return { display: 'inline-flex', alignItems: 'center', gap: 6, color, fontWeight: 700, whiteSpace: 'nowrap' }
 }
-

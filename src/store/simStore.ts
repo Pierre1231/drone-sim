@@ -8,12 +8,12 @@ interface SimStore {
   progress: number
   error: string | null
   result: SimResult | null
-  missionType: 'hover' | 'circle' | 'figure8' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-figure8' | null
+  missionType: 'hover' | 'circle' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-circle-7' | null
   setStatus: (status: SimStatus) => void
   setProgress: (progress: number) => void
   setError: (error: string | null) => void
   setResult: (result: SimResult | null) => void
-  setMissionType: (missionType: 'hover' | 'circle' | 'figure8' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-figure8' | null) => void
+  setMissionType: (missionType: 'hover' | 'circle' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-circle-7' | null) => void
   reset: () => void
 }
 

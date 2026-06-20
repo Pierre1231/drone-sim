@@ -1,3 +1,4 @@
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import * as THREE from 'three'
@@ -188,7 +189,7 @@ function CameraController({
   followMode: boolean
   target: THREE.Vector3
   followRef: React.MutableRefObject<{ r: number; theta: number; phi: number }>
-  orbitRef: React.RefObject<any>
+  orbitRef: React.RefObject<OrbitControlsImpl | null>
   followModeRef: React.MutableRefObject<boolean>
 }) {
   const { camera, gl } = useThree()
@@ -206,7 +207,7 @@ function CameraController({
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-  }, [gl])
+  }, [gl, followModeRef, followRef])
 
   useFrame(() => {
     if (followMode) {
@@ -246,20 +247,41 @@ function formatTime(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+function findFrameAtTime(times: number[], time: number): number {
+  if (times.length === 0) return 0
+  if (time <= times[0]) return 0
+  const last = times.length - 1
+  if (time >= times[last]) return last
+
+  let lo = 0
+  let hi = last
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2)
+    if (times[mid] < time) lo = mid + 1
+    else hi = mid - 1
+  }
+
+  const prev = Math.max(0, lo - 1)
+  return Math.abs(times[lo] - time) < Math.abs(time - times[prev]) ? lo : prev
+}
+
 export default function PlaybackPanel() {
   const { status, result } = useSimStore()
-  const [currentFrame, setCurrentFrame] = useState(0)
+  const [playbackTime, setPlaybackTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [followMode, setFollowMode] = useState(false)
   const totalFrames = result?.time.length ?? 0
+  const currentFrame = result ? findFrameAtTime(result.time, playbackTime) : 0
 
   const isDragging = useRef(false)
   const lastMouse = useRef({ x: 0, y: 0 })
   const sceneWrapRef = useRef<HTMLDivElement>(null)
-  const orbitRef = useRef<any>(null)
+  const orbitRef = useRef<OrbitControlsImpl | null>(null)
   const followModeRef = useRef(followMode)
-  followModeRef.current = followMode
+  useEffect(() => {
+    followModeRef.current = followMode
+  }, [followMode])
 
   // 初始偏移 (x=3, y=2, z=5) → 球坐标
   const r0 = Math.sqrt(3 * 3 + 2 * 2 + 5 * 5)
@@ -285,27 +307,35 @@ export default function PlaybackPanel() {
   useEffect(() => {
     if (!isPlaying || !result || totalFrames === 0) return
 
+    let lastTick = performance.now()
     const interval = setInterval(() => {
-      setCurrentFrame(prev => {
-        const next = prev + 1
-        if (next >= totalFrames - 1) {
+      const now = performance.now()
+      const elapsedSec = (now - lastTick) / 1000
+      lastTick = now
+      setPlaybackTime(prev => {
+        const end = result.time[totalFrames - 1]
+        const next = prev + elapsedSec * playbackSpeed
+        if (next >= end) {
           setIsPlaying(false)
-          return totalFrames - 1
+          return end
         }
         return next
       })
-    }, 10 / playbackSpeed)
+    }, 33)
 
     return () => clearInterval(interval)
   }, [isPlaying, result, playbackSpeed, totalFrames])
 
+  // 仿真完成后重置本地播放状态（与全局 status 同步）
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (status === 'complete') {
-      setCurrentFrame(0)
+      setPlaybackTime(0)
       setIsPlaying(false)
       setFollowMode(false)
     }
   }, [status])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (status === 'idle') {
     return (
@@ -454,7 +484,7 @@ export default function PlaybackPanel() {
         borderTop: '1px solid var(--border-default)',
       }}
       >
-        <button onClick={() => setCurrentFrame(0)} style={{
+        <button onClick={() => { setPlaybackTime(0); setIsPlaying(false) }} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'transparent', color: 'var(--text-primary)', border: 'none', borderRadius: '50%',
           cursor: 'pointer', transition: 'all 0.15s ease',
@@ -477,7 +507,7 @@ export default function PlaybackPanel() {
           {isPlaying ? <Pause size={20} /> : <Play size={20} />}
         </button>
 
-        <button onClick={() => setCurrentFrame(totalFrames - 1)} style={{
+        <button onClick={() => { setPlaybackTime(totalTime); setIsPlaying(false) }} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'transparent', color: 'var(--text-primary)', border: 'none', borderRadius: '50%',
           cursor: 'pointer', transition: 'all 0.15s ease',
@@ -491,9 +521,10 @@ export default function PlaybackPanel() {
         <input
           type="range"
           min={0}
-          max={totalFrames - 1}
-          value={currentFrame}
-          onChange={e => { setCurrentFrame(Number(e.target.value)); setIsPlaying(false) }}
+          max={totalTime}
+          step={Math.max(totalTime / 1000, 0.01)}
+          value={playbackTime}
+          onChange={e => { setPlaybackTime(Number(e.target.value)); setIsPlaying(false) }}
           style={{ flex: 1, margin: '0 var(--space-2)', accentColor: 'var(--accent-primary)' }}
         />
 
