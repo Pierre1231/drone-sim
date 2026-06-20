@@ -93,3 +93,36 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(70% 0.01 250);
 }
+
+/* ===== 原理说明文档页 ===== */
+.theory-heading {
+  position: relative;
+  scroll-margin-top: 76px;
+}
+.theory-heading:hover .heading-anchor {
+  opacity: 1;
+}
+
+/* 块级公式：居中、可横向滚动、防溢出 */
+.tex-block {
+  margin: 18px 0;
+  padding: 6px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+.tex-block .katex-display {
+  margin: 0;
+  padding: 2px 0;
+}
+.tex-block::-webkit-scrollbar {
+  height: 5px;
+}
+
+/* 行内公式略微收敛字号，贴合中文正文 */
+.tex-inline .katex {
+  font-size: 1.02em;
+}
+.katex {
+  font-size: 1.05em;
+}
