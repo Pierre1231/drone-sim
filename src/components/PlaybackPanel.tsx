@@ -2,65 +2,72 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import * as THREE from 'three'
-import { useRef, useEffect, useState } from 'react'
+import { memo, useMemo, useRef, useEffect, useState } from 'react'
 import { useSimStore } from '@/store/simStore'
 import { Play, Pause, SkipBack, SkipForward, Package } from 'lucide-react'
 
-function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
-  position: [number, number, number]
-  quaternion: [number, number, number, number]
-  motorSpeeds?: number[]
-  onClick?: () => void
+const ARM_LENGTH = 0.15
+const ARM_LEN = Math.sqrt(2) * ARM_LENGTH
+
+const MOTOR_POSITIONS: [number, number, number][] = [
+  [ARM_LENGTH, 0, ARM_LENGTH],
+  [-ARM_LENGTH, 0, ARM_LENGTH],
+  [-ARM_LENGTH, 0, -ARM_LENGTH],
+  [ARM_LENGTH, 0, -ARM_LENGTH],
+]
+
+const PROP_COLORS = ['#22c55e', '#ef4444', '#22c55e', '#ef4444']
+
+const ARM_CONFIGS = [
+  { pos: [0.075, 0.005, 0.075] as [number, number, number], rot: -Math.PI / 4 },
+  { pos: [-0.075, 0.005, 0.075] as [number, number, number], rot: Math.PI / 4 },
+  { pos: [-0.075, 0.005, -0.075] as [number, number, number], rot: -Math.PI / 4 },
+  { pos: [0.075, 0.005, -0.075] as [number, number, number], rot: Math.PI / 4 },
+]
+
+const LEG_POSITIONS: [number, number, number][] = [
+  [0.12, -0.04, 0.12],
+  [-0.12, -0.04, 0.12],
+  [-0.12, -0.04, -0.12],
+  [0.12, -0.04, -0.12],
+]
+
+const PROP_TIP_MARKERS = [
+  { p: [0.08, 0.002, 0] as [number, number, number] },
+  { p: [-0.08, 0.002, 0] as [number, number, number] },
+  { p: [0, 0.002, 0.08] as [number, number, number] },
+  { p: [0, 0.002, -0.08] as [number, number, number] },
+]
+
+function buildTrajectoryPositions(positions: number[][], maxPoints = positions.length): Float32Array {
+  const pointCount = Math.min(positions.length, maxPoints)
+  const data = new Float32Array(pointCount * 3)
+  for (let i = 0; i < pointCount; i++) {
+    const p = positions[i]
+    const offset = i * 3
+    data[offset] = p[0]
+    data[offset + 1] = -p[2]
+    data[offset + 2] = p[1]
+  }
+  return data
+}
+
+const DroneGeometry = memo(function DroneGeometry({
+  propRefs,
+  onSelectRef,
+}: {
+  propRefs: React.MutableRefObject<(THREE.Group | null)[]>
+  onSelectRef: React.MutableRefObject<(() => void) | undefined>
 }) {
-  const groupRef = useRef<THREE.Group>(null)
-  const propRefs = useRef<(THREE.Group | null)[]>([null, null, null, null])
-  const armLength = 0.15
-  const armLen = Math.sqrt(2) * armLength
-
-  useEffect(() => {
-    if (groupRef.current) {
-      groupRef.current.position.set(position[0], -position[2], position[1])
-      groupRef.current.quaternion.set(quaternion[1], quaternion[3], quaternion[2], quaternion[0])
-    }
-  }, [position, quaternion])
-
-  useFrame((_, delta) => {
-    propRefs.current.forEach((ref, i) => {
-      if (ref) {
-        const rpm = motorSpeeds && motorSpeeds[i] > 0 ? motorSpeeds[i] * 0.05 : 120
-        const dir = i === 1 || i === 3 ? -1 : 1 // CW motors (1,3) rotate opposite to CCW (0,2)
-        ref.rotation.y += dir * (rpm * 2 * Math.PI / 60) * delta
-      }
-    })
-  })
-
-  const motorPositions: [number, number, number][] = [
-    [armLength, 0, armLength],
-    [-armLength, 0, armLength],
-    [-armLength, 0, -armLength],
-    [armLength, 0, -armLength],
-  ]
-
-  const propColors = ['#22c55e', '#ef4444', '#22c55e', '#ef4444']
-
-  const armConfigs = [
-    { pos: [0.075, 0.005, 0.075] as [number, number, number], rot: -Math.PI / 4 },
-    { pos: [-0.075, 0.005, 0.075] as [number, number, number], rot: Math.PI / 4 },
-    { pos: [-0.075, 0.005, -0.075] as [number, number, number], rot: -Math.PI / 4 },
-    { pos: [0.075, 0.005, -0.075] as [number, number, number], rot: Math.PI / 4 },
-  ]
-
-  const legPositions: [number, number, number][] = [
-    [0.12, -0.04, 0.12],
-    [-0.12, -0.04, 0.12],
-    [-0.12, -0.04, -0.12],
-    [0.12, -0.04, -0.12],
-  ]
+  const handleSelect = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation()
+    onSelectRef.current?.()
+  }
 
   return (
-    <group ref={groupRef} onClick={(e) => { e.stopPropagation(); onClick?.() }}>
+    <>
       {/* 大面积透明点击检测球，确保远距离也能选中 */}
-      <mesh onClick={(e) => { e.stopPropagation(); onClick?.() }}>
+      <mesh onClick={handleSelect}>
         <sphereGeometry args={[0.35, 16, 16]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
@@ -76,15 +83,15 @@ function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
       </mesh>
 
       {/* 4 条机臂 */}
-      {armConfigs.map((arm, i) => (
+      {ARM_CONFIGS.map((arm, i) => (
         <mesh key={`arm-${i}`} position={arm.pos} rotation={[0, arm.rot, 0]}>
-          <boxGeometry args={[armLen, 0.008, 0.008]} />
+          <boxGeometry args={[ARM_LEN, 0.008, 0.008]} />
           <meshStandardMaterial color="#2d2d44" />
         </mesh>
       ))}
 
       {/* 4 个电机座 + 旋转桨叶 */}
-      {motorPositions.map((pos, i) => (
+      {MOTOR_POSITIONS.map((pos, i) => (
         <group key={`motor-${i}`}>
           {/* 电机座 */}
           <mesh position={[pos[0], 0.025, pos[2]]}>
@@ -96,23 +103,18 @@ function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
             {/* 桨叶 1（长条） */}
             <mesh>
               <boxGeometry args={[0.18, 0.003, 0.02]} />
-              <meshStandardMaterial color={propColors[i]} transparent opacity={0.55} />
+              <meshStandardMaterial color={PROP_COLORS[i]} transparent opacity={0.55} />
             </mesh>
             {/* 桨叶 2（垂直交叉） */}
             <mesh>
               <boxGeometry args={[0.02, 0.003, 0.18]} />
-              <meshStandardMaterial color={propColors[i]} transparent opacity={0.55} />
+              <meshStandardMaterial color={PROP_COLORS[i]} transparent opacity={0.55} />
             </mesh>
             {/* 桨叶尖端标记（用于肉眼判断旋转方向） */}
-            {[
-              { p: [0.08, 0.002, 0] as [number, number, number] },
-              { p: [-0.08, 0.002, 0] as [number, number, number] },
-              { p: [0, 0.002, 0.08] as [number, number, number] },
-              { p: [0, 0.002, -0.08] as [number, number, number] },
-            ].map((t, ti) => (
+            {PROP_TIP_MARKERS.map((t, ti) => (
               <mesh key={ti} position={t.p}>
                 <sphereGeometry args={[0.006, 6, 6]} />
-                <meshStandardMaterial color={propColors[i]} />
+                <meshStandardMaterial color={PROP_COLORS[i]} />
               </mesh>
             ))}
             {/* 桨叶中心帽 */}
@@ -125,7 +127,7 @@ function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
       ))}
 
       {/* 起落架 */}
-      {legPositions.map((pos, i) => (
+      {LEG_POSITIONS.map((pos, i) => (
         <group key={`leg-${i}`}>
           {/* 竖杆 */}
           <mesh position={[pos[0], pos[1] / 2, pos[2]]}>
@@ -139,44 +141,88 @@ function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
           </mesh>
         </group>
       ))}
+    </>
+  )
+})
+
+function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
+  position: [number, number, number]
+  quaternion: [number, number, number, number]
+  motorSpeeds?: number[]
+  onClick?: () => void
+}) {
+  const groupRef = useRef<THREE.Group>(null)
+  const propRefs = useRef<(THREE.Group | null)[]>([null, null, null, null])
+  const motorSpeedsRef = useRef(motorSpeeds)
+  const onClickRef = useRef(onClick)
+
+  useEffect(() => {
+    motorSpeedsRef.current = motorSpeeds
+  }, [motorSpeeds])
+
+  useEffect(() => {
+    onClickRef.current = onClick
+  }, [onClick])
+
+  useEffect(() => {
+    if (groupRef.current) {
+      groupRef.current.position.set(position[0], -position[2], position[1])
+      groupRef.current.quaternion.set(quaternion[1], quaternion[3], quaternion[2], quaternion[0])
+    }
+  }, [position, quaternion])
+
+  useFrame((_, delta) => {
+    const speeds = motorSpeedsRef.current
+    propRefs.current.forEach((ref, i) => {
+      if (ref) {
+        const rpm = speeds && speeds[i] > 0 ? speeds[i] * 0.05 : 120
+        const dir = i === 1 || i === 3 ? -1 : 1 // CW motors (1,3) rotate opposite to CCW (0,2)
+        ref.rotation.y += dir * (rpm * 2 * Math.PI / 60) * delta
+      }
+    })
+  })
+
+  return (
+    <group ref={groupRef}>
+      <DroneGeometry propRefs={propRefs} onSelectRef={onClickRef} />
     </group>
   )
 }
 
-function TrajectoryLine({ positions, color = '#3b82f6' }: { positions: number[][]; color?: string }) {
+const TrajectoryLine = memo(function TrajectoryLine({ positions, color = '#3b82f6' }: { positions: number[][]; color?: string }) {
+  const positionArray = useMemo(() => buildTrajectoryPositions(positions, 1000), [positions])
   if (positions.length < 2) return null
-  const points = positions.slice(0, 1000).map(p => [p[0], -p[2], p[1]])
 
   return (
     <line>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          args={[new Float32Array(points.flat()), 3]}
+          args={[positionArray, 3]}
         />
       </bufferGeometry>
       <lineBasicMaterial color={color} transparent opacity={0.5} />
     </line>
   )
-}
+})
 
 /** Dashed reference trajectory line */
-function RefTrajectoryLine({ positions }: { positions: number[][] }) {
+const RefTrajectoryLine = memo(function RefTrajectoryLine({ positions }: { positions: number[][] }) {
+  const positionArray = useMemo(() => buildTrajectoryPositions(positions), [positions])
   if (positions.length < 2) return null
-  const points = positions.map(p => [p[0], -p[2], p[1]])
 
   return (
     <line>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          args={[new Float32Array(points.flat()), 3]}
+          args={[positionArray, 3]}
         />
       </bufferGeometry>
       <lineDashedMaterial color="#f59e0b" dashSize={0.3} gapSize={0.2} transparent opacity={0.6} />
     </line>
   )
-}
+})
 
 /** 跟随视角摄像机控制器：固定在惯性坐标系中的球坐标偏移，带平滑过渡 */
 function CameraController({
@@ -247,11 +293,12 @@ function formatTime(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-function findFrameAtTime(times: number[], time: number): number {
-  if (times.length === 0) return 0
-  if (time <= times[0]) return 0
+function findFrameRange(times: number[], time: number): { from: number; to: number; alpha: number } {
+  if (times.length === 0) return { from: 0, to: 0, alpha: 0 }
+  if (time <= times[0]) return { from: 0, to: 0, alpha: 0 }
+
   const last = times.length - 1
-  if (time >= times[last]) return last
+  if (time >= times[last]) return { from: last, to: last, alpha: 0 }
 
   let lo = 0
   let hi = last
@@ -261,8 +308,39 @@ function findFrameAtTime(times: number[], time: number): number {
     else hi = mid - 1
   }
 
-  const prev = Math.max(0, lo - 1)
-  return Math.abs(times[lo] - time) < Math.abs(time - times[prev]) ? lo : prev
+  const from = Math.max(0, lo - 1)
+  const to = lo
+  const span = times[to] - times[from]
+  return { from, to, alpha: span > 0 ? (time - times[from]) / span : 0 }
+}
+
+function lerp(a: number, b: number, alpha: number): number {
+  return a + (b - a) * alpha
+}
+
+function lerpTuple(values: number[][], from: number, to: number, alpha: number): [number, number, number] {
+  const a = values[from]
+  const b = values[to]
+  return [
+    lerp(a[0], b[0], alpha),
+    lerp(a[1], b[1], alpha),
+    lerp(a[2], b[2], alpha),
+  ]
+}
+
+function lerpArray(values: number[][], from: number, to: number, alpha: number): number[] {
+  const a = values[from]
+  const b = values[to]
+  return a.map((value, i) => lerp(value, b[i], alpha))
+}
+
+function slerpQuaternion(values: number[][], from: number, to: number, alpha: number): [number, number, number, number] {
+  const a = values[from]
+  const b = values[to]
+  const qa = new THREE.Quaternion(a[1], a[3], a[2], a[0])
+  const qb = new THREE.Quaternion(b[1], b[3], b[2], b[0])
+  qa.slerp(qb, alpha)
+  return [qa.w, qa.x, qa.z, qa.y]
 }
 
 export default function PlaybackPanel() {
@@ -272,7 +350,19 @@ export default function PlaybackPanel() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [followMode, setFollowMode] = useState(false)
   const totalFrames = result?.time.length ?? 0
-  const currentFrame = result ? findFrameAtTime(result.time, playbackTime) : 0
+  const playbackSample = useMemo(() => {
+    if (!result || result.time.length === 0) return null
+
+    const { from, to, alpha } = findFrameRange(result.time, playbackTime)
+    return {
+      position: lerpTuple(result.position, from, to, alpha),
+      quaternion: slerpQuaternion(result.quaternion, from, to, alpha),
+      motorSpeeds: lerpArray(result.motorSpeeds, from, to, alpha),
+      voltage: lerp(result.voltage[from], result.voltage[to], alpha),
+      soc: lerp(result.soc[from], result.soc[to], alpha),
+      time: playbackTime,
+    }
+  }, [result, playbackTime])
 
   const isDragging = useRef(false)
   const lastMouse = useRef({ x: 0, y: 0 })
@@ -308,7 +398,8 @@ export default function PlaybackPanel() {
     if (!isPlaying || !result || totalFrames === 0) return
 
     let lastTick = performance.now()
-    const interval = setInterval(() => {
+    let frameId = 0
+    const tick = () => {
       const now = performance.now()
       const elapsedSec = (now - lastTick) / 1000
       lastTick = now
@@ -321,9 +412,11 @@ export default function PlaybackPanel() {
         }
         return next
       })
-    }, 33)
+      frameId = requestAnimationFrame(tick)
+    }
+    frameId = requestAnimationFrame(tick)
 
-    return () => clearInterval(interval)
+    return () => cancelAnimationFrame(frameId)
   }, [isPlaying, result, playbackSpeed, totalFrames])
 
   // 仿真完成后重置本地播放状态（与全局 status 同步）
@@ -386,9 +479,11 @@ export default function PlaybackPanel() {
     )
   }
 
-  const pos = result.position[currentFrame] as [number, number, number]
-  const quat = result.quaternion[currentFrame] as [number, number, number, number]
-  const timeSec = result.time[currentFrame]
+  if (!playbackSample) return null
+
+  const pos = playbackSample.position
+  const quat = playbackSample.quaternion
+  const timeSec = playbackSample.time
   const totalTime = result.time[totalFrames - 1]
 
   // Three.js 世界坐标系中的无人机位置（NED → Three.js: x=x, y=-z, z=y）
@@ -441,7 +536,7 @@ export default function PlaybackPanel() {
           <DroneModel
             position={pos}
             quaternion={quat}
-            motorSpeeds={result.motorSpeeds[currentFrame]}
+            motorSpeeds={playbackSample.motorSpeeds}
             onClick={() => setFollowMode(true)}
           />
           {/* Actual trajectory (blue) */}
@@ -460,8 +555,8 @@ export default function PlaybackPanel() {
         }}>
           <div>⏱ {formatTime(timeSec)} / {formatTime(totalTime)}</div>
           <div>⬆ {(-pos[2]).toFixed(1)} m</div>
-          <div>⚡ {result.voltage[currentFrame].toFixed(2)} V</div>
-          <div>🔋 {(result.soc[currentFrame] * 100).toFixed(0)}%</div>
+          <div>⚡ {playbackSample.voltage.toFixed(2)} V</div>
+          <div>🔋 {(playbackSample.soc * 100).toFixed(0)}%</div>
         </div>
 
         {followMode && (
