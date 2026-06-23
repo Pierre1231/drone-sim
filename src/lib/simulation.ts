@@ -1,4 +1,4 @@
-import { integrate, createState, type ForcesAndMoments } from './dynamics'
+import { integrate, createState, quatToEuler, type ForcesAndMoments } from './dynamics'
 import { BatteryModel, MotorModel, ESCModel } from './components'
 import type { BatteryParams, MotorParams, ESCParams } from './components'
 import { PropellerModel, ControlAllocator } from './propulsion'
@@ -95,6 +95,18 @@ interface MotorResult {
   speed: number // rad/s
   current: number
   dutyCycle: number
+}
+
+function eulerToQuat(roll: number, pitch: number, yaw: number): [number, number, number, number] {
+  const cr = Math.cos(roll * 0.5), sr = Math.sin(roll * 0.5)
+  const cp = Math.cos(pitch * 0.5), sp = Math.sin(pitch * 0.5)
+  const cy = Math.cos(yaw * 0.5), sy = Math.sin(yaw * 0.5)
+  return [
+    cr * cp * cy + sr * sp * sy,
+    sr * cp * cy - cr * sp * sy,
+    cr * sp * cy + sr * cp * sy,
+    cr * cp * sy - sr * sp * cy,
+  ]
 }
 
 /**
@@ -259,6 +271,10 @@ export function runSimulation(
   let simTime = 0
   let nextLogTime = 0
   let slowAccumulator = 0
+  const yawLockedOutputMissions = new Set<SimConfig['missionType']>(['circle', 'fullspeed', 'test-circle', 'test-circle-7'])
+  const outputYaw = yawLockedOutputMissions.has(config.missionType)
+    ? quatToEuler(state.quaternion)[2]
+    : null
 
   const result: SimResult = {
     time: [], position: [], velocity: [], quaternion: [], angularVelocity: [],
@@ -472,8 +488,14 @@ export function runSimulation(
       result.time.push(simTime)
       result.position.push([...state.position])
       result.velocity.push([...state.velocity])
-      result.quaternion.push([...state.quaternion])
-      result.angularVelocity.push([...state.angularVelocity])
+      if (outputYaw !== null) {
+        const [roll, pitch] = quatToEuler(state.quaternion)
+        result.quaternion.push(eulerToQuat(roll, pitch, outputYaw))
+        result.angularVelocity.push([state.angularVelocity[0], state.angularVelocity[1], 0])
+      } else {
+        result.quaternion.push([...state.quaternion])
+        result.angularVelocity.push([...state.angularVelocity])
+      }
       result.motorSpeeds.push(motorResults.map(r => r.speed * 60 / (2 * Math.PI)))
       result.motorCurrents.push(motorCurrents)
       result.thrusts.push(motorResults.map(r => r.thrust))

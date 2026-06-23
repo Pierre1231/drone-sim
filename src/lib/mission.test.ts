@@ -136,5 +136,23 @@ describe('CircleMission', () => {
     expect(sp1.position[0]).toBeCloseTo(sp2.position[0], 0)
     expect(sp1.position[1]).toBeCloseTo(sp2.position[1], 0)
   })
+
+  it('should keep a fixed north heading during circle flight', () => {
+    const mission = new CircleMission({
+      targetAltitude: 10,
+      takeoffDuration: 5,
+      hoverDuration: 3,
+      radius: 5,
+      speed: 2,
+      batteryCutoffSoc: 0.2,
+    })
+
+    const circleStart = 5 + 3
+    for (const t of [circleStart, circleStart + 1, circleStart + 5, circleStart + 10]) {
+      const sp = mission.getSetpoint(t)
+      expect(sp.heading).toEqual([1, 0, 0])
+      expect(sp.angularVelocity).toBeUndefined()
+    }
+  })
 })
 

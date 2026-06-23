@@ -130,7 +130,7 @@ function circleTrimQuaternion(speed: number, radius: number): [number, number, n
   const desiredForce = [-speed * speed / radius, 0, -g] as [number, number, number]
   const bT = normalize(desiredForce)
   const bz = [-bT[0], -bT[1], -bT[2]] as [number, number, number]
-  const bxRef = [0, 1, 0] as [number, number, number]
+  const bxRef = [1, 0, 0] as [number, number, number]
   const by = normalize(cross(bz, bxRef))
   const bx = normalize(cross(by, bz))
   return rotationMatrixToQuaternion([
@@ -143,8 +143,8 @@ function circleTrimQuaternion(speed: number, radius: number): [number, number, n
 const CIRCLE_INITIAL = {
   position: [5, 0, -5] as [number, number, number],
   velocity: [0, 2, 0] as [number, number, number],
-  quaternion: [Math.SQRT1_2, 0, 0, Math.SQRT1_2] as [number, number, number, number],
-  angularVelocity: [0, 0, 0.4] as [number, number, number],
+  quaternion: circleTrimQuaternion(2, 5),
+  angularVelocity: [0, 0, 0] as [number, number, number],
 }
 
 const DOC_HOVER_TRIM = {
@@ -201,7 +201,7 @@ export function buildDocAlignedSimConfig(
         position: [5, 0, -5],
         velocity: [0, 7, 0],
         quaternion: circleTrimQuaternion(7, 5),
-        angularVelocity: [0, 0, 1.4],
+        angularVelocity: [0, 0, 0],
       },
       maxSimTime: 1000,
     }

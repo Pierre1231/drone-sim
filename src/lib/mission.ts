@@ -81,8 +81,43 @@ function cross(a: [number, number, number], b: [number, number, number]): [numbe
   ]
 }
 
-function dot(a: [number, number, number], b: [number, number, number]): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+type Mat3 = [
+  [number, number, number],
+  [number, number, number],
+  [number, number, number],
+]
+
+function desiredRotationFromAcceleration(ax: number, ay: number, heading: [number, number, number]): Mat3 {
+  const desiredForce = [ax, ay, -9.81] as [number, number, number]
+  const bT = normalize(desiredForce)
+  const bz = [-bT[0], -bT[1], -bT[2]] as [number, number, number]
+  const by = normalize(cross(bz, heading))
+  const bx = normalize(cross(by, bz))
+  return [
+    [bx[0], by[0], bz[0]],
+    [bx[1], by[1], bz[1]],
+    [bx[2], by[2], bz[2]],
+  ]
+}
+
+function mat3TransposeMul(a: Mat3, b: Mat3): Mat3 {
+  return [
+    [
+      a[0][0] * b[0][0] + a[1][0] * b[1][0] + a[2][0] * b[2][0],
+      a[0][0] * b[0][1] + a[1][0] * b[1][1] + a[2][0] * b[2][1],
+      a[0][0] * b[0][2] + a[1][0] * b[1][2] + a[2][0] * b[2][2],
+    ],
+    [
+      a[0][1] * b[0][0] + a[1][1] * b[1][0] + a[2][1] * b[2][0],
+      a[0][1] * b[0][1] + a[1][1] * b[1][1] + a[2][1] * b[2][1],
+      a[0][1] * b[0][2] + a[1][1] * b[1][2] + a[2][1] * b[2][2],
+    ],
+    [
+      a[0][2] * b[0][0] + a[1][2] * b[1][0] + a[2][2] * b[2][0],
+      a[0][2] * b[0][1] + a[1][2] * b[1][1] + a[2][2] * b[2][1],
+      a[0][2] * b[0][2] + a[1][2] * b[1][2] + a[2][2] * b[2][2],
+    ],
+  ]
 }
 
 export class CircleMission {
@@ -131,18 +166,22 @@ export class CircleMission {
     const vy = this.radius * omega * Math.cos(theta)
     const ax = -omega * omega * x
     const ay = -omega * omega * y
-    const horizontalSpeed = Math.hypot(vx, vy)
-    const heading: [number, number, number] = horizontalSpeed > 1e-6
-      ? [vx / horizontalSpeed, vy / horizontalSpeed, 0]
-      : [1, 0, 0]
+    const heading: [number, number, number] = [1, 0, 0]
 
-    const desiredForce = [ax, ay, -9.81] as [number, number, number]
-    const bT = normalize(desiredForce)
-    const bz = [-bT[0], -bT[1], -bT[2]] as [number, number, number]
-    const by = normalize(cross(bz, heading))
-    const bx = normalize(cross(by, bz))
-    const omegaNed = [0, 0, omega] as [number, number, number]
-    const angularVelocity = [dot(bx, omegaNed), dot(by, omegaNed), dot(bz, omegaNed)] as [number, number, number]
+    const R = desiredRotationFromAcceleration(ax, ay, heading)
+    const eps = 1e-3
+    const thetaNext = theta + omega * eps
+    const xNext = this.radius * Math.cos(thetaNext)
+    const yNext = this.radius * Math.sin(thetaNext)
+    const axNext = -omega * omega * xNext
+    const ayNext = -omega * omega * yNext
+    const RNext = desiredRotationFromAcceleration(axNext, ayNext, heading)
+    const omegaSkew = mat3TransposeMul(R, RNext)
+    const angularVelocity = [
+      (omegaSkew[2][1] - omegaSkew[1][2]) / (2 * eps),
+      (omegaSkew[0][2] - omegaSkew[2][0]) / (2 * eps),
+      0,
+    ] as [number, number, number]
 
     return {
       position: [x, y, -this.targetAltitude],

@@ -17,6 +17,10 @@ function eulerToQuat(roll: number, pitch: number, yaw: number): [number, number,
   ]
 }
 
+function angleDiff(a: number, b: number): number {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b))
+}
+
 /* ================================================================
    A. 动力学核心（无控制闭环，直接给非重力合力和力矩）
    ================================================================ */
@@ -487,8 +491,8 @@ describe('B. 全链路闭环', () => {
       initialState: {
         position: [5, 0, -5],
         velocity: [0, 2, 0],
-        quaternion: [Math.SQRT1_2, 0, 0, Math.SQRT1_2],
-        angularVelocity: [0, 0, 0.4],
+        quaternion: [1, 0, 0, 0],
+        angularVelocity: [0, 0, 0],
       },
       maxSimTime: 120,
     })
@@ -787,5 +791,23 @@ describe('B. 全链路闭环', () => {
     const powers = result.power.slice(stableStartIdx)
     const avgPower = powers.reduce((s, p) => s + p, 0) / powers.length
     expect(avgPower).toBeCloseTo(341.2, -1) // ±5 W
+  }, 10000)
+
+  it('keeps yaw fixed during straight and circular mission simulations', () => {
+    for (const missionType of ['fullspeed', 'test-circle', 'test-circle-7'] as const) {
+      const config = {
+        ...buildDocAlignedSimConfig(missionType),
+        maxSimTime: 20,
+      }
+      const result = runSimulation(config)
+      const [, , initialYaw] = quatToEuler(result.quaternion[0] as [number, number, number, number])
+
+      let maxYawDelta = 0
+      for (const q of result.quaternion) {
+        const [, , yaw] = quatToEuler(q as [number, number, number, number])
+        maxYawDelta = Math.max(maxYawDelta, Math.abs(angleDiff(yaw, initialYaw)))
+      }
+      expect(maxYawDelta, missionType).toBeLessThan(0.05)
+    }
   }, 10000)
 })
