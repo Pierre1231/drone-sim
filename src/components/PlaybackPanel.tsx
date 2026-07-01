@@ -1,10 +1,11 @@
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+﻿import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Grid } from '@react-three/drei'
 import * as THREE from 'three'
 import { memo, useMemo, useRef, useEffect, useState } from 'react'
 import { useSimStore } from '@/store/simStore'
 import { Play, Pause, SkipBack, SkipForward, Package } from 'lucide-react'
+import { samplePlayback } from '@/lib/playbackSampler'
 
 const ARM_LENGTH = 0.15
 const ARM_LEN = Math.sqrt(2) * ARM_LENGTH
@@ -66,23 +67,23 @@ const DroneGeometry = memo(function DroneGeometry({
 
   return (
     <>
-      {/* 大面积透明点击检测球，确保远距离也能选中 */}
+      {/* Large transparent hit target so the drone is selectable from a distance. */}
       <mesh onClick={handleSelect}>
         <sphereGeometry args={[0.35, 16, 16]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {/* 中心机身 */}
+      {/* Center body */}
       <mesh position={[0, 0.01, 0]}>
         <boxGeometry args={[0.06, 0.03, 0.08]} />
         <meshStandardMaterial color="#1a1a2e" />
       </mesh>
-      {/* 机身上盖（抬高避免与机身深度冲突） */}
+      {/* Top cover, slightly raised to avoid depth fighting. */}
       <mesh position={[0, 0.035, 0]}>
         <boxGeometry args={[0.05, 0.008, 0.07]} />
         <meshStandardMaterial color="#2d2d44" polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
       </mesh>
 
-      {/* 4 条机臂 */}
+      {/* Four arms */}
       {ARM_CONFIGS.map((arm, i) => (
         <mesh key={`arm-${i}`} position={arm.pos} rotation={[0, arm.rot, 0]}>
           <boxGeometry args={[ARM_LEN, 0.008, 0.008]} />
@@ -90,34 +91,34 @@ const DroneGeometry = memo(function DroneGeometry({
         </mesh>
       ))}
 
-      {/* 4 个电机座 + 旋转桨叶 */}
+      {/* Four motor mounts and propellers */}
       {MOTOR_POSITIONS.map((pos, i) => (
         <group key={`motor-${i}`}>
-          {/* 电机座 */}
+          {/* Motor mount */}
           <mesh position={[pos[0], 0.025, pos[2]]}>
             <cylinderGeometry args={[0.018, 0.02, 0.025, 16]} />
             <meshStandardMaterial color="#4a4a6a" metalness={0.6} roughness={0.3} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
           </mesh>
-          {/* 旋转的桨叶组 */}
+          {/* Rotating propeller group */}
           <group ref={el => { propRefs.current[i] = el }} position={[pos[0], 0.04, pos[2]]}>
-            {/* 桨叶 1（长条） */}
+            {/* Blade 1 */}
             <mesh>
               <boxGeometry args={[0.18, 0.003, 0.02]} />
               <meshStandardMaterial color={PROP_COLORS[i]} transparent opacity={0.55} />
             </mesh>
-            {/* 桨叶 2（垂直交叉） */}
+            {/* Blade 2 */}
             <mesh>
               <boxGeometry args={[0.02, 0.003, 0.18]} />
               <meshStandardMaterial color={PROP_COLORS[i]} transparent opacity={0.55} />
             </mesh>
-            {/* 桨叶尖端标记（用于肉眼判断旋转方向） */}
+            {/* Tip markers for visual rotation direction. */}
             {PROP_TIP_MARKERS.map((t, ti) => (
               <mesh key={ti} position={t.p}>
                 <sphereGeometry args={[0.006, 6, 6]} />
                 <meshStandardMaterial color={PROP_COLORS[i]} />
               </mesh>
             ))}
-            {/* 桨叶中心帽 */}
+            {/* Propeller hub */}
             <mesh>
               <sphereGeometry args={[0.014, 8, 8]} />
               <meshStandardMaterial color="#333" />
@@ -126,15 +127,15 @@ const DroneGeometry = memo(function DroneGeometry({
         </group>
       ))}
 
-      {/* 起落架 */}
+      {/* Landing gear */}
       {LEG_POSITIONS.map((pos, i) => (
         <group key={`leg-${i}`}>
-          {/* 竖杆 */}
+          {/* Strut */}
           <mesh position={[pos[0], pos[1] / 2, pos[2]]}>
             <cylinderGeometry args={[0.004, 0.004, Math.abs(pos[1]), 8]} />
             <meshStandardMaterial color="#111" />
           </mesh>
-          {/* 脚底垫 */}
+          {/* Foot pad */}
           <mesh position={[pos[0], pos[1] - 0.01, pos[2]]}>
             <cylinderGeometry args={[0.015, 0.015, 0.004, 8]} />
             <meshStandardMaterial color="#333" />
@@ -224,7 +225,7 @@ const RefTrajectoryLine = memo(function RefTrajectoryLine({ positions }: { posit
   )
 })
 
-/** 跟随视角摄像机控制器：固定在惯性坐标系中的球坐标偏移，带平滑过渡 */
+/** Follow-camera controller with a smooth inertial spherical offset. */
 function CameraController({
   followMode,
   target,
@@ -242,7 +243,7 @@ function CameraController({
   const currentPos = useRef(new THREE.Vector3())
   const wasFollowing = useRef(false)
 
-  // 绑定 canvas 原生 wheel：只在跟随模式下生效，阻止页面滚动
+  // Bind native wheel on the canvas while follow mode is active.
   useEffect(() => {
     const canvas = gl.domElement
     const onWheel = (e: WheelEvent) => {
@@ -258,7 +259,7 @@ function CameraController({
   useFrame(() => {
     if (followMode) {
       if (!wasFollowing.current) {
-        // 刚进入跟随模式：从当前摄像机位置开始平滑插值
+        // Entering follow mode: start smoothing from the current camera position.
         currentPos.current.copy(camera.position)
         wasFollowing.current = true
       }
@@ -274,7 +275,7 @@ function CameraController({
       camera.lookAt(target)
     } else {
       if (wasFollowing.current) {
-        // 刚退出跟随模式：同步 OrbitControls 目标，避免跳变
+        // Leaving follow mode: sync the OrbitControls target to avoid a jump.
         if (orbitRef.current) {
           orbitRef.current.target.copy(target)
           orbitRef.current.update()
@@ -293,56 +294,6 @@ function formatTime(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-function findFrameRange(times: number[], time: number): { from: number; to: number; alpha: number } {
-  if (times.length === 0) return { from: 0, to: 0, alpha: 0 }
-  if (time <= times[0]) return { from: 0, to: 0, alpha: 0 }
-
-  const last = times.length - 1
-  if (time >= times[last]) return { from: last, to: last, alpha: 0 }
-
-  let lo = 0
-  let hi = last
-  while (lo <= hi) {
-    const mid = Math.floor((lo + hi) / 2)
-    if (times[mid] < time) lo = mid + 1
-    else hi = mid - 1
-  }
-
-  const from = Math.max(0, lo - 1)
-  const to = lo
-  const span = times[to] - times[from]
-  return { from, to, alpha: span > 0 ? (time - times[from]) / span : 0 }
-}
-
-function lerp(a: number, b: number, alpha: number): number {
-  return a + (b - a) * alpha
-}
-
-function lerpTuple(values: number[][], from: number, to: number, alpha: number): [number, number, number] {
-  const a = values[from]
-  const b = values[to]
-  return [
-    lerp(a[0], b[0], alpha),
-    lerp(a[1], b[1], alpha),
-    lerp(a[2], b[2], alpha),
-  ]
-}
-
-function lerpArray(values: number[][], from: number, to: number, alpha: number): number[] {
-  const a = values[from]
-  const b = values[to]
-  return a.map((value, i) => lerp(value, b[i], alpha))
-}
-
-function slerpQuaternion(values: number[][], from: number, to: number, alpha: number): [number, number, number, number] {
-  const a = values[from]
-  const b = values[to]
-  const qa = new THREE.Quaternion(a[1], a[3], a[2], a[0])
-  const qb = new THREE.Quaternion(b[1], b[3], b[2], b[0])
-  qa.slerp(qb, alpha)
-  return [qa.w, qa.x, qa.z, qa.y]
-}
-
 export default function PlaybackPanel() {
   const { status, result } = useSimStore()
   const [playbackTime, setPlaybackTime] = useState(0)
@@ -352,16 +303,7 @@ export default function PlaybackPanel() {
   const totalFrames = result?.time.length ?? 0
   const playbackSample = useMemo(() => {
     if (!result || result.time.length === 0) return null
-
-    const { from, to, alpha } = findFrameRange(result.time, playbackTime)
-    return {
-      position: lerpTuple(result.position, from, to, alpha),
-      quaternion: slerpQuaternion(result.quaternion, from, to, alpha),
-      motorSpeeds: lerpArray(result.motorSpeeds, from, to, alpha),
-      voltage: lerp(result.voltage[from], result.voltage[to], alpha),
-      soc: lerp(result.soc[from], result.soc[to], alpha),
-      time: playbackTime,
-    }
+    return samplePlayback(result, playbackTime)
   }, [result, playbackTime])
 
   const isDragging = useRef(false)
@@ -373,7 +315,7 @@ export default function PlaybackPanel() {
     followModeRef.current = followMode
   }, [followMode])
 
-  // 初始偏移 (x=3, y=2, z=5) → 球坐标
+  // Initial offset (x=3, y=2, z=5), converted to spherical coordinates.
   const r0 = Math.sqrt(3 * 3 + 2 * 2 + 5 * 5)
   const followRef = useRef({
     r: r0,
@@ -381,7 +323,7 @@ export default function PlaybackPanel() {
     phi: Math.acos(2 / r0),
   })
 
-  // ESC 退出跟随模式
+  // Escape exits follow mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setFollowMode(false)
@@ -390,10 +332,9 @@ export default function PlaybackPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // （滚轮事件已移至 CameraController 内部绑定到 canvas，避免 div 冒泡失效）
+  // Wheel events are bound inside CameraController to avoid wrapper bubbling issues.
 
-  // 播放循环：用 setInterval 固定 10ms 步进（对应仿真数据 100Hz），
-  // 避免 requestAnimationFrame 在高刷新率显示器上 delta 过小导致无法前进
+  // Playback loop driven by requestAnimationFrame.
   useEffect(() => {
     if (!isPlaying || !result || totalFrames === 0) return
 
@@ -419,7 +360,7 @@ export default function PlaybackPanel() {
     return () => cancelAnimationFrame(frameId)
   }, [isPlaying, result, playbackSpeed, totalFrames])
 
-  // 仿真完成后重置本地播放状态（与全局 status 同步）
+  // Reset local playback state when a simulation completes.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (status === 'complete') {
@@ -440,7 +381,7 @@ export default function PlaybackPanel() {
         <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
           <Package size={64} style={{ display: 'block', margin: '0 auto var(--space-4)', opacity: 0.5 }} strokeWidth={1.5} />
           <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>等待仿真开始</h3>
-          <p style={{ fontSize: 14, opacity: 0.7 }}>在上方配置区选择部件并点击"开始仿真"</p>
+          <p style={{ fontSize: 14, opacity: 0.7 }}>在上方配置区选择部件并点击开始仿真</p>
         </div>
       </div>
     )
@@ -486,10 +427,10 @@ export default function PlaybackPanel() {
   const timeSec = playbackSample.time
   const totalTime = result.time[totalFrames - 1]
 
-  // Three.js 世界坐标系中的无人机位置（NED → Three.js: x=x, y=-z, z=y）
-  const droneTarget = new THREE.Vector3(pos[0], -pos[2], pos[1])
+  // Drone position in Three.js world coordinates.
+  const droneTarget = new THREE.Vector3(...playbackSample.threePosition)
 
-  // 跟随模式鼠标交互
+  // Follow-mode pointer interaction.
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!followMode || e.button !== 0) return
     isDragging.current = true
@@ -504,7 +445,7 @@ export default function PlaybackPanel() {
     lastMouse.current = { x: e.clientX, y: e.clientY }
     followRef.current.theta += dx * 0.005
     followRef.current.phi -= dy * 0.005
-    // 限制 phi 避免越过极点
+    // Clamp phi to avoid crossing the poles.
     followRef.current.phi = Math.max(0.1, Math.min(Math.PI - 0.1, followRef.current.phi))
   }
 
@@ -553,10 +494,10 @@ export default function PlaybackPanel() {
           background: 'rgba(0,0,0,0.6)', borderRadius: 'var(--radius-lg)',
           padding: 'var(--space-3)', color: 'white', fontSize: 14, lineHeight: 1.8,
         }}>
-          <div>⏱ {formatTime(timeSec)} / {formatTime(totalTime)}</div>
-          <div>⬆ {(-pos[2]).toFixed(1)} m</div>
-          <div>⚡ {playbackSample.voltage.toFixed(2)} V</div>
-          <div>🔋 {(playbackSample.soc * 100).toFixed(0)}%</div>
+          <div>时间 {formatTime(timeSec)} / {formatTime(totalTime)}</div>
+          <div>高度 {(-pos[2]).toFixed(1)} m</div>
+          <div>电压 {playbackSample.voltage.toFixed(2)} V</div>
+          <div>SOC {(playbackSample.soc * 100).toFixed(0)}%</div>
         </div>
 
         {followMode && (
@@ -566,7 +507,7 @@ export default function PlaybackPanel() {
             padding: 'var(--space-2) var(--space-4)', color: 'white',
             fontSize: 13, fontWeight: 600, pointerEvents: 'none',
           }}>
-            📷 跟随视角模式 · 滚轮缩放 · 左键旋转 · ESC 退出
+            跟随视角模式 | 滚轮缩放 | 左键旋转 | ESC 退出
           </div>
         )}
       </div>

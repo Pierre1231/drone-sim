@@ -1,21 +1,22 @@
-import { runSimulation, type SimConfig, type SimProgress } from '@/lib/simulation'
+import type { SimConfig } from '@/lib/simulation'
+import { createSimulationRunner } from '@/lib/simulationEngine'
 
-let cancelled = false
+const runner = createSimulationRunner()
 
 self.onmessage = (e: MessageEvent) => {
   const { type, config } = e.data
 
   if (type === 'start') {
-    cancelled = false
     const simConfig = config as SimConfig
 
     try {
-      const result = runSimulation(
-        simConfig,
-        (progress: SimProgress) => {
-          self.postMessage({ type: 'progress', progress })
-        },
-        () => cancelled
+      const result = runner.run(
+        { config: simConfig },
+        {
+          onProgress: progress => {
+            self.postMessage({ type: 'progress', progress })
+          },
+        }
       )
 
       self.postMessage({ type: 'complete', result })
@@ -25,6 +26,6 @@ self.onmessage = (e: MessageEvent) => {
   }
 
   if (type === 'cancel') {
-    cancelled = true
+    runner.cancel()
   }
 }
