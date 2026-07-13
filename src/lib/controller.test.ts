@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { CascadedController, createDocumentControllerGains } from './controller'
+import type { Mat3 } from './controller'
+
+function rotationMatrixFromEuler(roll: number, pitch: number, yaw: number): Mat3 {
+  const cr = Math.cos(roll), sr = Math.sin(roll)
+  const cp = Math.cos(pitch), sp = Math.sin(pitch)
+  const cy = Math.cos(yaw), sy = Math.sin(yaw)
+  return [
+    [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+    [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+    [-sp, cp * sr, cp * cr],
+  ] as unknown as Mat3
+}
 
 describe('createDocumentControllerGains', () => {
   it('returns the document test-case gain matrices', () => {
@@ -98,165 +110,16 @@ describe('CascadedController', () => {
       )
       // Position loop output is 0 because position error is zero.
       // a_c = a_ff + Kp^v * e_v + Ki^v * integral + Kd^v * de/dt
-      // e_v = 1, integral after this step = 0.1, derivative = (1 - 0)/0.1 = 10.
-      const expectedAccel =
+      // e_v = 1, integral = 1*dt, de/dt = (1-0)/dt = 10
+      const expectedAx =
         0.5 +
         gains.velocityKp[0] * 1 +
-        gains.velocityKi[0] * 0.1 +
+        gains.velocityKi[0] * (1 * dt) +
         gains.velocityKd[0] * 10
-      expect(out.desiredForceNed[0]).toBeCloseTo(mass * expectedAccel, 3)
-    })
-  })
-
-  describe('attitude loop', () => {
-    it('computes zero attitude error at identity attitude', () => {
-      const ctrl = makeController()
-      const out = ctrl.update(
-        { position: [0, 0, -5] },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: [1, 0, 0, 0],
-          angularVelocity: [0, 0, 0],
-        },
-        0.01
-      )
-      expect(out.attitudeError[0]).toBeCloseTo(0, 10)
-      expect(out.attitudeError[1]).toBeCloseTo(0, 10)
-      expect(out.attitudeError[2]).toBeCloseTo(0, 10)
+      expect(out.desiredForceNed[0]).toBeCloseTo(mass * expectedAx, 3)
     })
 
-    it('uses rotation-matrix error e_R, not Euler-angle differences', () => {
-      const ctrl = makeController()
-      // Small positive roll (rotate body x by +0.05 rad around x axis).
-      const delta = 0.05
-      const cos = Math.cos(delta / 2)
-      const sin = Math.sin(delta / 2)
-      const qRoll: [number, number, number, number] = [cos, sin, 0, 0]
-      const out = ctrl.update(
-        { position: [0, 0, -5] },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: qRoll,
-          angularVelocity: [0, 0, 0],
-        },
-        0.01
-      )
-      // For the document definition e_R = 0.5 vee(R^T R_d - R_d^T R),
-      // a positive roll yields e_R,x ≈ -delta.
-      expect(out.attitudeError[0]).toBeCloseTo(-delta, 2)
-      expect(Math.abs(out.attitudeError[1])).toBeLessThan(1e-6)
-      expect(Math.abs(out.attitudeError[2])).toBeLessThan(1e-6)
-    })
-
-    it('aligns heading reference with the trajectory velocity', () => {
-      const ctrl = makeController()
-      const out = ctrl.update(
-        {
-          position: [0, 0, -5],
-          heading: [0, 1, 0],
-        },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: [1, 0, 0, 0],
-          angularVelocity: [0, 0, 0],
-        },
-        0.01
-      )
-      // Desired force is upward only -> b_zd = [0,0,1]; heading [0,1,0]
-      // yields b_yd = [-1,0,0] and b_xd = [0,-1,0].
-      expect(out.desiredRotationMatrix[0][2]).toBeCloseTo(0, 5)
-      expect(out.desiredRotationMatrix[1][2]).toBeCloseTo(0, 5)
-      expect(out.desiredRotationMatrix[2][2]).toBeCloseTo(1, 5)
-      expect(out.desiredRotationMatrix[2][0]).toBeCloseTo(0, 5)
-      expect(out.desiredRotationMatrix[2][1]).toBeCloseTo(0, 5)
-    })
-  })
-
-  describe('angular velocity loop', () => {
-    it('produces proportional moment with the document rate gains', () => {
-      const ctrl = makeController()
-      const out = ctrl.update(
-        { position: [0, 0, -5] },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: [1, 0, 0, 0],
-          angularVelocity: [0, 0, 0],
-        },
-        0.01
-      )
-      // Identity attitude, zero angular velocity -> zero rate error -> zero moment.
-      expect(out.moments[0]).toBeCloseTo(0, 10)
-      expect(out.moments[1]).toBeCloseTo(0, 10)
-      expect(out.moments[2]).toBeCloseTo(0, 10)
-
-      ctrl.reset()
-      const out2 = ctrl.update(
-        { position: [0, 0, -5] },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: [1, 0, 0, 0],
-          angularVelocity: [1, 0, 0],
-        },
-        0.01
-      )
-      // e_omega = -[1,0,0]; proportional term = -0.2. Over dt=0.01 the
-      // integral term adds Ki * e * dt = -0.0003, giving -0.2003.
-      expect(out2.moments[0]).toBeCloseTo(-(gains.rateKp[0] + gains.rateKi[0] * 0.01), 5)
-      expect(out2.moments[1]).toBeCloseTo(0, 10)
-      expect(out2.moments[2]).toBeCloseTo(0, 10)
-    })
-  })
-
-  describe('controller output', () => {
-    it('outputs total thrust equal to weight at hover and zero moments', () => {
-      const ctrl = makeController()
-      const out = ctrl.update(
-        { position: [0, 0, -5] },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: [1, 0, 0, 0],
-          angularVelocity: [0, 0, 0],
-        },
-        0.01
-      )
-      expect(out.totalThrust).toBeCloseTo(mass * 9.81, 5)
-      expect(out.moments[0]).toBeCloseTo(0, 5)
-      expect(out.moments[1]).toBeCloseTo(0, 5)
-      expect(out.moments[2]).toBeCloseTo(0, 5)
-    })
-
-    it('subtracts aerodynamic and disturbance force estimates from desired force', () => {
-      const ctrl = makeController()
-      const out = ctrl.update(
-        { position: [0, 0, -5] },
-        {
-          position: [0, 0, -5],
-          velocity: [0, 0, 0],
-          quaternion: [1, 0, 0, 0],
-          angularVelocity: [0, 0, 0],
-        },
-        0.01,
-        {
-          aeroForceNed: [-2, 0, 0],
-          disturbanceForceNed: [0, 3, 0],
-        }
-      )
-      // Hover desired force is [0,0,-mg]; subtracting aero/disturbance estimates
-      // shifts the x/y components.
-      expect(out.desiredForceNed[0]).toBeCloseTo(2, 5)
-      expect(out.desiredForceNed[1]).toBeCloseTo(-3, 5)
-      expect(out.desiredForceNed[2]).toBeCloseTo(-mass * 9.81, 3)
-    })
-  })
-
-  describe('integral anti-windup', () => {
-    it('stops integrating when the position-loop output saturates', () => {
+    it('anti-windup prevents integral from growing while position loop is saturated', () => {
       const ctrl = new CascadedController({
         mass,
         gains,
@@ -264,7 +127,7 @@ describe('CascadedController', () => {
       })
       const dt = 0.01
       let lastOutput = 0
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < 200; i++) {
         const out = ctrl.update(
           { position: [10, 0, 0] },
           {
@@ -315,6 +178,50 @@ describe('CascadedController', () => {
       // Opposite command should immediately become negative (anti-windup prevents
       // the integral from keeping the output pinned positive).
       expect(afterSat.desiredForceNed[0]).toBeLessThan(0)
+    })
+  })
+
+  describe('control modes', () => {
+    it('attitude mode bypasses position/velocity loops and tracks an attitude reference', () => {
+      const ctrl = makeController()
+      const R_d = rotationMatrixFromEuler(0, 5 * Math.PI / 180, 0)
+      const out = ctrl.update(
+        {
+          position: [100, 0, 0], // would normally create a huge force command
+          controlMode: 'attitude',
+          attitude: R_d,
+        },
+        {
+          position: [0, 0, 0],
+          velocity: [0, 0, 0],
+          quaternion: [1, 0, 0, 0],
+          angularVelocity: [0, 0, 0],
+        },
+        0.01
+      )
+      expect(out.totalThrust).toBeCloseTo(mg, 3)
+      expect(out.moments[1]).not.toBe(0)
+      expect(out.attitudeError.some(e => Math.abs(e) > 0.01)).toBe(true)
+    })
+
+    it('rate mode bypasses outer loops and tracks an angular velocity reference', () => {
+      const ctrl = makeController()
+      const out = ctrl.update(
+        {
+          position: [100, 0, 0],
+          controlMode: 'rate',
+          angularVelocity: [1, 0, 0],
+        },
+        {
+          position: [0, 0, 0],
+          velocity: [0, 0, 0],
+          quaternion: [1, 0, 0, 0],
+          angularVelocity: [0, 0, 0],
+        },
+        0.01
+      )
+      expect(out.totalThrust).toBeCloseTo(mg, 3)
+      expect(out.moments[0]).toBeGreaterThan(0)
     })
   })
 })

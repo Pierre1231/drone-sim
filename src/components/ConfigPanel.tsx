@@ -4,9 +4,9 @@ import { useConfigStore, defaultConfig } from '@/store/configStore'
 import { useSimStore } from '@/store/simStore'
 import { getBatteryCells, getESCs, getFrames, getMotors, getPropellers } from '@/lib/database'
 import { buildDocAlignedSimConfig, getDronePresets, getPresetById } from '@/lib/presets'
-import type { SimConfig } from '@/lib/simulation'
 
-const missionOptions: { id: SimConfig['missionType']; label: string; description: string }[] = [
+
+const missionOptions: { id: 'hover' | 'fullspeed' | 'circle' | 'test-circle-7'; label: string; description: string }[] = [
   { id: 'hover', label: 'B01 悬停', description: '5 m 悬停，推进系统从文档悬停平衡点初始化，运行到 SOC=20%。' },
   { id: 'fullspeed', label: 'B02 5 m/s 直线', description: '无风条件下保持 5 m 高度，沿 +x_n 方向 5 m/s 匀速飞行。' },
   { id: 'circle', label: 'B03 圆轨迹 2 m/s', description: '半径 5 m、高度 5 m、速度 2 m/s 的圆形轨迹。' },

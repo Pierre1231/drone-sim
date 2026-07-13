@@ -1,3 +1,9 @@
+type RotationMatrix = [
+  [number, number, number],
+  [number, number, number],
+  [number, number, number],
+]
+
 export interface Setpoint {
   position: [number, number, number]
   velocity: [number, number, number]
@@ -8,6 +14,10 @@ export interface Setpoint {
   /** Optional desired body angular velocity feedforward (rad/s). */
   angularVelocity?: [number, number, number]
   landing: boolean
+  /** Desired attitude rotation matrix R_d. Used with controlMode='attitude'. */
+  attitude?: RotationMatrix
+  /** Control mode passed to the cascaded controller. */
+  controlMode?: 'full' | 'attitude' | 'rate'
 }
 
 export interface HoverMissionParams {
@@ -243,5 +253,145 @@ export class FullSpeedMission {
       heading: [1, 0, 0],
       landing: false,
     }
+  }
+}
+
+// ============================================================================
+// Step missions for control-law tuning
+// ============================================================================
+
+function stepRotationMatrixFromEuler(roll: number, pitch: number, yaw: number): RotationMatrix {
+  const cr = Math.cos(roll), sr = Math.sin(roll)
+  const cp = Math.cos(pitch), sp = Math.sin(pitch)
+  const cy = Math.cos(yaw), sy = Math.sin(yaw)
+  return [
+    [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+    [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+    [-sp, cp * sr, cp * cr],
+  ]
+}
+
+function stepZeroSetpoint(): Setpoint {
+  return {
+    position: [0, 0, 0],
+    velocity: [0, 0, 0],
+    acceleration: [0, 0, 0],
+    heading: [1, 0, 0],
+    landing: false,
+  }
+}
+
+export interface StepPositionMissionParams {
+  stepTime?: number
+  amplitude?: number
+  axis?: number
+}
+
+export class StepPositionMission {
+  private stepTime: number
+  private amplitude: number
+  private axis: number
+
+  constructor(params: StepPositionMissionParams = {}) {
+    this.stepTime = params.stepTime ?? 0.5
+    this.amplitude = params.amplitude ?? 1
+    this.axis = params.axis ?? 0
+  }
+
+  getSetpoint(time: number): Setpoint {
+    const sp = stepZeroSetpoint()
+    if (time >= this.stepTime) {
+      sp.position[this.axis] = this.amplitude
+    }
+    return sp
+  }
+}
+
+export interface StepVelocityMissionParams {
+  stepTime?: number
+  amplitude?: number
+  axis?: number
+}
+
+export class StepVelocityMission {
+  private stepTime: number
+  private amplitude: number
+  private axis: number
+
+  constructor(params: StepVelocityMissionParams = {}) {
+    this.stepTime = params.stepTime ?? 0.5
+    this.amplitude = params.amplitude ?? 1
+    this.axis = params.axis ?? 0
+  }
+
+  getSetpoint(time: number): Setpoint {
+    const sp = stepZeroSetpoint()
+    if (time >= this.stepTime) {
+      sp.velocity[this.axis] = this.amplitude
+    }
+    return sp
+  }
+}
+
+export interface StepAttitudeMissionParams {
+  stepTime?: number
+  amplitudeRad?: number
+  axis?: number
+}
+
+export class StepAttitudeMission {
+  private stepTime: number
+  private amplitudeRad: number
+  private axis: number
+  private hoverAttitude: RotationMatrix
+  private steppedAttitude: RotationMatrix
+
+  constructor(params: StepAttitudeMissionParams = {}) {
+    this.stepTime = params.stepTime ?? 0.5
+    this.amplitudeRad = params.amplitudeRad ?? 5 * Math.PI / 180
+    this.axis = params.axis ?? 1
+    this.hoverAttitude = stepRotationMatrixFromEuler(0, 0, 0)
+    this.steppedAttitude = this.axis === 0
+      ? stepRotationMatrixFromEuler(this.amplitudeRad, 0, 0)
+      : this.axis === 1
+        ? stepRotationMatrixFromEuler(0, this.amplitudeRad, 0)
+        : stepRotationMatrixFromEuler(0, 0, this.amplitudeRad)
+  }
+
+  getSetpoint(time: number): Setpoint {
+    const stepped = time >= this.stepTime
+    return {
+      ...stepZeroSetpoint(),
+      controlMode: stepped ? 'attitude' : 'full',
+      attitude: stepped ? this.steppedAttitude : this.hoverAttitude,
+    }
+  }
+}
+
+export interface StepRateMissionParams {
+  stepTime?: number
+  amplitude?: number
+  axis?: number
+}
+
+export class StepRateMission {
+  private stepTime: number
+  private amplitude: number
+  private axis: number
+
+  constructor(params: StepRateMissionParams = {}) {
+    this.stepTime = params.stepTime ?? 0.5
+    this.amplitude = params.amplitude ?? 0.5
+    this.axis = params.axis ?? 0
+  }
+
+  getSetpoint(time: number): Setpoint {
+    const sp = stepZeroSetpoint()
+    sp.controlMode = 'rate'
+    if (time >= this.stepTime) {
+      sp.angularVelocity = [0, 0, 0]
+      sp.angularVelocity[this.axis] = this.amplitude
+    }
+    return sp
   }
 }

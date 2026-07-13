@@ -14,6 +14,7 @@
 
 import { quatToRotationMatrix } from './coordinates'
 import { PIDController } from './propulsion'
+export type { Mat3 } from './coordinates'
 import type { Mat3, Quaternion } from './coordinates'
 
 /** 3D vector expressed as a plain mutable tuple. */
@@ -63,6 +64,10 @@ export interface ControllerSetpoint {
   /** Desired heading reference direction b_x,ref^n (unit vector, default north). */
   heading?: V3
   angularVelocity?: V3 // body frame (rad/s)
+  /** Desired attitude rotation matrix R_d. When supplied with controlMode='attitude' the position/velocity loops are bypassed. */
+  attitude?: Mat3
+  /** Control mode: full cascade (default), attitude-only, or rate-only. */
+  controlMode?: 'full' | 'attitude' | 'rate'
 }
 
 export interface ControllerStateEstimate {
@@ -262,92 +267,95 @@ export class CascadedController {
       disturbanceMomentBody?: V3
     }
   ): ControllerOutput {
-    const v_d: V3 = setpoint.velocity ?? [0, 0, 0]
-    const a_ff: V3 = setpoint.acceleration ?? [0, 0, 0]
-    const omega_d: V3 = setpoint.angularVelocity ?? [0, 0, 0]
-
-    // ========== Position loop (PI) ==========
-    const e_p = v3Sub(setpoint.position, state.position)
-    const v_c: V3 = [
-      v_d[0] + this.posPids[0].update(e_p[0], dt),
-      v_d[1] + this.posPids[1].update(e_p[1], dt),
-      v_d[2] + this.posPids[2].update(e_p[2], dt),
-    ]
-
-    // ========== Velocity loop (PID + feedforward) ==========
-    const e_v = v3Sub(v_c, state.velocity)
-    const a_c: V3 = [
-      a_ff[0] + this.velPids[0].update(e_v[0], dt),
-      a_ff[1] + this.velPids[1].update(e_v[1], dt),
-      a_ff[2] + this.velPids[2].update(e_v[2], dt),
-    ]
-
-    // Desired net force in NED
-    const F_c_ned: V3 = [
-      this.mass * (a_c[0] - 0),
-      this.mass * (a_c[1] - 0),
-      this.mass * (a_c[2] - G),
-    ]
-
-    const aeroForceNed = feedforwards?.aeroForceNed
-    if (aeroForceNed) {
-      F_c_ned[0] -= aeroForceNed[0]
-      F_c_ned[1] -= aeroForceNed[1]
-      F_c_ned[2] -= aeroForceNed[2]
-    }
-
-    const disturbanceForceNed = feedforwards?.disturbanceForceNed
-    if (disturbanceForceNed) {
-      F_c_ned[0] -= disturbanceForceNed[0]
-      F_c_ned[1] -= disturbanceForceNed[1]
-      F_c_ned[2] -= disturbanceForceNed[2]
-    }
-
-    const F_norm = v3Norm(F_c_ned)
-
-    // Total thrust scalar: project the desired NED force onto the body thrust
-    // axis b_T^b = -e_z^b (document Eq. 880-882). T_c = (b_T^b)^T F_c^b.
+    const mode = setpoint.controlMode ?? 'full'
     const R = quatToRotationMatrix(state.quaternion as Quaternion)
-    const F_c_body = mat3VecMul(mat3Transpose(R), F_c_ned)
-    let totalThrust = -F_c_body[2]
 
-    // Desired thrust direction and attitude
+    // ========== Position/velocity loops (full cascade) ==========
+    let totalThrust = 0
     let R_d: Mat3
-    if (F_norm < this.epsF) {
-      // Keep previous desired attitude when the desired force is negligible.
-      totalThrust = 0
-      R_d = this.lastDesiredRotationMatrix
-    } else {
-      if (totalThrust < 0) {
+    let F_c_ned: V3 = [0, 0, 0]
+
+    if (mode === 'full') {
+      const v_d: V3 = setpoint.velocity ?? [0, 0, 0]
+      const a_ff: V3 = setpoint.acceleration ?? [0, 0, 0]
+
+      const e_p = v3Sub(setpoint.position, state.position)
+      const v_c: V3 = [
+        v_d[0] + this.posPids[0].update(e_p[0], dt),
+        v_d[1] + this.posPids[1].update(e_p[1], dt),
+        v_d[2] + this.posPids[2].update(e_p[2], dt),
+      ]
+
+      const e_v = v3Sub(v_c, state.velocity)
+      const a_c: V3 = [
+        a_ff[0] + this.velPids[0].update(e_v[0], dt),
+        a_ff[1] + this.velPids[1].update(e_v[1], dt),
+        a_ff[2] + this.velPids[2].update(e_v[2], dt),
+      ]
+
+      F_c_ned = [
+        this.mass * a_c[0],
+        this.mass * a_c[1],
+        this.mass * (a_c[2] - G),
+      ]
+
+      const aeroForceNed = feedforwards?.aeroForceNed
+      if (aeroForceNed) {
+        F_c_ned[0] -= aeroForceNed[0]
+        F_c_ned[1] -= aeroForceNed[1]
+        F_c_ned[2] -= aeroForceNed[2]
+      }
+
+      const disturbanceForceNed = feedforwards?.disturbanceForceNed
+      if (disturbanceForceNed) {
+        F_c_ned[0] -= disturbanceForceNed[0]
+        F_c_ned[1] -= disturbanceForceNed[1]
+        F_c_ned[2] -= disturbanceForceNed[2]
+      }
+
+      const F_norm = v3Norm(F_c_ned)
+      const F_c_body = mat3VecMul(mat3Transpose(R), F_c_ned)
+      totalThrust = -F_c_body[2]
+
+      if (F_norm < this.epsF) {
         totalThrust = 0
+        R_d = this.lastDesiredRotationMatrix
+      } else {
+        if (totalThrust < 0) totalThrust = 0
+        const b_T_ned = v3Scale(F_c_ned, 1 / F_norm)
+        const b_zd: V3 = [-b_T_ned[0], -b_T_ned[1], -b_T_ned[2]]
+
+        let b_x_ref = setpoint.heading ?? ([1, 0, 0] as V3)
+        if (Math.abs(Math.abs(v3Dot(b_zd, b_x_ref)) - 1) < this.epsR) {
+          b_x_ref = Math.abs(b_zd[0]) < 0.9 ? ([1, 0, 0] as V3) : ([0, 1, 0] as V3)
+        }
+
+        const c_y: V3 = [
+          b_zd[1] * b_x_ref[2] - b_zd[2] * b_x_ref[1],
+          b_zd[2] * b_x_ref[0] - b_zd[0] * b_x_ref[2],
+          b_zd[0] * b_x_ref[1] - b_zd[1] * b_x_ref[0],
+        ]
+        const c_y_norm = v3Norm(c_y)
+        const b_yd = c_y_norm > this.epsR ? v3Scale(c_y, 1 / c_y_norm) : ([0, 1, 0] as V3)
+        const b_xd: V3 = [
+          b_yd[1] * b_zd[2] - b_yd[2] * b_zd[1],
+          b_yd[2] * b_zd[0] - b_yd[0] * b_zd[2],
+          b_yd[0] * b_zd[1] - b_yd[1] * b_zd[0],
+        ]
+
+        R_d = [
+          [b_xd[0], b_yd[0], b_zd[0]],
+          [b_xd[1], b_yd[1], b_zd[1]],
+          [b_xd[2], b_yd[2], b_zd[2]],
+        ] as unknown as Mat3
       }
-      const b_T_ned = v3Scale(F_c_ned, 1 / F_norm)
-      const b_zd: V3 = [-b_T_ned[0], -b_T_ned[1], -b_T_ned[2]]
-
-      let b_x_ref = setpoint.heading ?? ([1, 0, 0] as V3)
-      // Avoid a heading reference that is (anti-)parallel to b_zd.
-      if (Math.abs(Math.abs(v3Dot(b_zd, b_x_ref)) - 1) < this.epsR) {
-        b_x_ref = Math.abs(b_zd[0]) < 0.9 ? ([1, 0, 0] as V3) : ([0, 1, 0] as V3)
-      }
-
-      const c_y: V3 = [
-        b_zd[1] * b_x_ref[2] - b_zd[2] * b_x_ref[1],
-        b_zd[2] * b_x_ref[0] - b_zd[0] * b_x_ref[2],
-        b_zd[0] * b_x_ref[1] - b_zd[1] * b_x_ref[0],
-      ]
-      const c_y_norm = v3Norm(c_y)
-      const b_yd = c_y_norm > this.epsR ? v3Scale(c_y, 1 / c_y_norm) : ([0, 1, 0] as V3)
-      const b_xd: V3 = [
-        b_yd[1] * b_zd[2] - b_yd[2] * b_zd[1],
-        b_yd[2] * b_zd[0] - b_yd[0] * b_zd[2],
-        b_yd[0] * b_zd[1] - b_yd[1] * b_zd[0],
-      ]
-
-      R_d = [
-        [b_xd[0], b_yd[0], b_zd[0]],
-        [b_xd[1], b_yd[1], b_zd[1]],
-        [b_xd[2], b_yd[2], b_zd[2]],
-      ] as unknown as Mat3
+    } else if (mode === 'attitude') {
+      R_d = setpoint.attitude ?? this.lastDesiredRotationMatrix
+      totalThrust = this.mass * G
+    } else {
+      // mode === 'rate': keep last attitude reference, thrust at hover trim
+      R_d = this.lastDesiredRotationMatrix
+      totalThrust = this.mass * G
     }
 
     this.lastDesiredRotationMatrix = R_d
@@ -357,11 +365,14 @@ export class CascadedController {
     const R_d_T = mat3Transpose(R_d)
     const e_R = v3Scale(vee(mat3Sub(mat3Mul(R_T, R_d), mat3Mul(R_d_T, R))), 0.5)
 
-    const omega_c: V3 = [
-      omega_d[0] + this.attPids[0].update(e_R[0], dt),
-      omega_d[1] + this.attPids[1].update(e_R[1], dt),
-      omega_d[2] + this.attPids[2].update(e_R[2], dt),
-    ]
+    const omega_d: V3 = setpoint.angularVelocity ?? [0, 0, 0]
+    const omega_c: V3 = mode === 'rate'
+      ? omega_d
+      : [
+          omega_d[0] + this.attPids[0].update(e_R[0], dt),
+          omega_d[1] + this.attPids[1].update(e_R[1], dt),
+          omega_d[2] + this.attPids[2].update(e_R[2], dt),
+        ]
 
     // ========== Angular velocity loop (PID) ==========
     const e_omega = v3Sub(omega_c, state.angularVelocity)
@@ -381,7 +392,7 @@ export class CascadedController {
     return {
       totalThrust,
       moments,
-      desiredForceNed: F_c_ned,
+      desiredForceNed: mode === 'full' ? F_c_ned : [0, 0, 0],
       desiredRotationMatrix: R_d,
       attitudeError: e_R,
     }

@@ -5,9 +5,10 @@ import { PropellerModel, ControlAllocator } from './propulsion'
 import { Environment } from './environment'
 import type { WindModelParams } from './environment'
 import { LowSpeedDrag, AerodynamicDamping, computeDragMomentArm } from './aerodynamics'
-import { HoverMission, CircleMission, FullSpeedMission } from './mission'
+import { HoverMission, CircleMission, FullSpeedMission, StepPositionMission, StepVelocityMission, StepAttitudeMission, StepRateMission } from './mission'
 import { CascadedController, createDocumentControllerGains } from './controller'
 import type { DroneConfig } from '@/store/configStore'
+import type { ControllerGains, Mat3 } from './controller'
 import { cross, rotateNedToBody, rotateBodyToNed } from './coordinates'
 import {
   computeRotorAngularMomentum,
@@ -17,7 +18,7 @@ import {
 } from './rotorDynamics'
 
 export interface SimConfig {
-  missionType: 'hover' | 'circle' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-circle-7'
+  missionType: 'hover' | 'circle' | 'fullspeed' | 'test-hover' | 'test-circle' | 'test-circle-7' | 'step-position' | 'step-velocity' | 'step-attitude' | 'step-rate'
   droneConfig: DroneConfig
   frameMass: number
   motorParams: MotorParams
@@ -65,6 +66,8 @@ export interface SimConfig {
   }
   /** Maximum simulation time (s). Default 1200. */
   maxSimTime?: number
+  /** Optional controller gains. Defaults to document gains. */
+  controllerGains?: ControllerGains
 }
 
 export interface SimResult {
@@ -215,7 +218,7 @@ export function runSimulation(
 
   const controller = new CascadedController({
     mass: totalMass,
-    gains: createDocumentControllerGains(),
+    gains: config.controllerGains ?? createDocumentControllerGains(),
     limits: controllerLimits,
   })
 
@@ -234,7 +237,15 @@ export function runSimulation(
         })
       : mt === 'fullspeed'
         ? new FullSpeedMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, hoverDuration: mp.hoverDuration ?? defaultHover, speed: mp.speed ?? 5, batteryCutoffSoc: 0.2 })
-        : new HoverMission({ targetAltitude: 5, takeoffDuration: defaultTakeoff, batteryCutoffSoc: 0.2 })
+        : mt === 'step-position'
+          ? new StepPositionMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
+          : mt === 'step-velocity'
+            ? new StepVelocityMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
+            : mt === 'step-attitude'
+              ? new StepAttitudeMission({ stepTime: 0.5, amplitudeRad: 5 * Math.PI / 180, axis: 1 })
+              : mt === 'step-rate'
+                ? new StepRateMission({ stepTime: 0.5, amplitude: 0.5, axis: 0 })
+                : new HoverMission({ targetAltitude: 5, takeoffDuration: defaultTakeoff, batteryCutoffSoc: 0.2 })
 
   let state = createState({ mass: totalMass })
   if (config.initialState) {
@@ -323,6 +334,8 @@ export function runSimulation(
         acceleration: setpoint.acceleration,
         heading: setpoint.heading,
         angularVelocity: setpoint.angularVelocity,
+        attitude: setpoint.attitude as Mat3 | undefined,
+        controlMode: setpoint.controlMode,
       },
       {
         position: state.position,
