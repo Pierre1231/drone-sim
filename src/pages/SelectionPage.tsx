@@ -16,11 +16,7 @@ function SelectField({ label, value, options, onChange }: SelectFieldProps) {
   return (
     <label style={fieldStyle}>
       <span style={labelStyle}>{label}</span>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={selectStyle}
-      >
+      <select className="ds-select" value={value} onChange={e => onChange(e.target.value)}>
         {options.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
@@ -46,12 +42,12 @@ function NumberField({ label, value, min, max, step, suffix, onChange }: NumberF
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <input
           type="number"
+          className="ds-input"
           value={value}
           min={min}
           max={max}
           step={step}
           onChange={e => onChange(Number(e.target.value))}
-          style={numberInputStyle}
         />
         {suffix && <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{suffix}</span>}
       </div>
@@ -71,10 +67,10 @@ function ResultCard({
   accent: string
 }) {
   return (
-    <div style={{ ...cardStyle, borderTop: `4px solid ${accent}` }}>
+    <div className="ds-card" style={{ ...cardStyle, borderTop: `4px solid ${accent}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
         {icon}
-        <h2 style={cardTitleStyle}>{title}</h2>
+        <h2 className="ds-title" style={{ fontSize: 16, margin: 0 }}>{title}</h2>
       </div>
       <div style={bigMetricStyle}>
         <span style={bigMetricValueStyle}>{result.enduranceMin.toFixed(1)}</span>
@@ -148,12 +144,10 @@ export default function SelectionPage() {
   const update = (partial: Partial<DroneConfig>) => setConfig(partial)
 
   return (
-    <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'var(--space-10) var(--space-6)' }}>
+    <div className="page-container">
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>
-            选型模式
-          </h1>
+          <h1 className="ds-display" style={{ fontSize: 32, marginBottom: 8 }}>选型模式</h1>
           <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>
             选择部件并快速估算悬停与 15 m/s 高速前飞工况下的续航。
           </p>
@@ -163,7 +157,7 @@ export default function SelectionPage() {
             <button
               key={p.label}
               onClick={() => setConfig(p.config)}
-              style={presetButtonStyle}
+              className="ds-button secondary"
             >
               {p.label}
             </button>
@@ -171,8 +165,8 @@ export default function SelectionPage() {
         </div>
       </div>
 
-      <section style={sectionStyle}>
-        <h3 style={sectionTitleStyle}>部件配置</h3>
+      <section className="section-card ds-fade-in">
+        <h3 className="ds-title" style={{ fontSize: 18, marginBottom: 16 }}>部件配置</h3>
         <div style={formGridStyle}>
           <SelectField
             label="机架"
@@ -235,7 +229,7 @@ export default function SelectionPage() {
       </section>
 
       {result.warnings.length > 0 && (
-        <section style={{ marginBottom: 24 }}>
+        <section style={{ marginBottom: 24, marginTop: 24 }}>
           {result.warnings.map((w, i) => (
             <div key={i} style={warningStyle}>
               <AlertTriangle size={18} color="var(--status-danger)" />
@@ -245,9 +239,9 @@ export default function SelectionPage() {
         </section>
       )}
 
-      <section style={sectionStyle}>
-        <h3 style={sectionTitleStyle}>续航估算</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+      <section className="ds-fade-in" style={{ marginTop: 24 }}>
+        <h3 className="ds-title" style={{ fontSize: 18, marginBottom: 16 }}>续航估算</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }} className="ds-stagger">
           <ResultCard
             title="悬停（低功率）"
             icon={<Timer size={24} color="var(--status-success)" />}
@@ -266,20 +260,16 @@ export default function SelectionPage() {
   )
 }
 
-const sectionStyle: React.CSSProperties = {
-  background: 'var(--bg-surface)',
-  borderRadius: 16,
-  border: '1px solid var(--border-default)',
-  padding: 'var(--space-6)',
-  marginBottom: 24,
+const fieldStyle: React.CSSProperties = {
+  display: 'block',
 }
 
-const sectionTitleStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-display)',
-  fontSize: 18,
-  fontWeight: 700,
-  color: 'var(--text-primary)',
-  marginBottom: 16,
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  marginBottom: 6,
 }
 
 const formGridStyle: React.CSSProperties = {
@@ -288,81 +278,31 @@ const formGridStyle: React.CSSProperties = {
   gap: 16,
 }
 
-const fieldStyle: React.CSSProperties = {
+const cardStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 6,
-}
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--text-secondary)',
-}
-
-const selectStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid var(--border-default)',
-  background: 'var(--bg-primary)',
-  color: 'var(--text-primary)',
-  fontSize: 14,
-}
-
-const numberInputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid var(--border-default)',
-  background: 'var(--bg-primary)',
-  color: 'var(--text-primary)',
-  fontSize: 14,
-  width: '100%',
-}
-
-const presetButtonStyle: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 8,
-  border: '1px solid var(--border-default)',
-  background: 'var(--bg-surface)',
-  color: 'var(--text-secondary)',
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-primary)',
-  borderRadius: 12,
   padding: 24,
-  border: '1px solid var(--border-default)',
-}
-
-const cardTitleStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-display)',
-  fontSize: 18,
-  fontWeight: 700,
-  color: 'var(--text-primary)',
 }
 
 const bigMetricStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'baseline',
   gap: 8,
-  marginBottom: 8,
 }
 
 const bigMetricValueStyle: React.CSSProperties = {
   fontFamily: 'var(--font-display)',
   fontSize: 48,
   fontWeight: 800,
+  letterSpacing: '-0.03em',
   color: 'var(--text-primary)',
   lineHeight: 1,
 }
 
 const bigMetricUnitStyle: React.CSSProperties = {
-  fontSize: 18,
-  color: 'var(--text-secondary)',
+  fontSize: 16,
   fontWeight: 600,
+  color: 'var(--text-secondary)',
 }
 
 const warningStyle: React.CSSProperties = {
@@ -370,8 +310,7 @@ const warningStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 10,
   padding: '12px 16px',
-  background: 'oklch(95% 0.03 25)',
-  border: '1px solid oklch(85% 0.06 25)',
-  borderRadius: 8,
+  background: 'var(--status-danger-subtle)',
+  borderRadius: 'var(--radius-lg)',
   marginBottom: 10,
 }

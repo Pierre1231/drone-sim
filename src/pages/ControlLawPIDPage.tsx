@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
-import { useConfigStore } from '@/store/configStore'
+import { useConfigStore, defaultConfig } from '@/store/configStore'
 import { useControllerStore, type LoopTab } from '@/store/controllerStore'
 import { buildSimConfig } from '@/lib/configBuilder'
+import { getPresetById } from '@/lib/presets'
 import { quatToEuler } from '@/lib/dynamics'
 import type { ControllerGains } from '@/lib/controller'
 import type { SimResult } from '@/lib/simulation'
@@ -175,9 +176,20 @@ function buildControlOption(time: number[], control: number[]): EChartsOption {
 }
 
 export default function ControlLawPIDPage() {
+  const { config, setConfig } = useConfigStore()
   const { activeLoopTab, setActiveLoopTab, pidGains, setPidGain, rollPitchLinked, setRollPitchLinked } = useControllerStore()
   const result = useControllerStore(state => state.lastResponse)
   const [activeAxis, setActiveAxis] = useState<0 | 1 | 2>(0)
+
+  // 如果用户直接进入 PID 页面且没有配置过部件，自动加载 test-standard 预设
+  useEffect(() => {
+    if (!config.frameId) {
+      const preset = getPresetById('test-standard')
+      if (preset) {
+        setConfig({ ...defaultConfig, ...preset.config })
+      }
+    }
+  }, [config.frameId, setConfig])
 
   useDebouncedSimulation()
 
@@ -199,11 +211,9 @@ export default function ControlLawPIDPage() {
   }, [chartData])
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-10) var(--space-6)' }}>
+    <div className="page-container">
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>
-          PID 控制律
-        </h1>
+        <h1 className="ds-display" style={{ fontSize: 32, marginBottom: 8 }}>PID 控制律</h1>
         <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>
           调整串级 PID 增益，实时观察阶跃响应与控制量变化。
         </p>
@@ -214,7 +224,7 @@ export default function ControlLawPIDPage() {
           <button
             key={tab}
             onClick={() => setActiveLoopTab(tab)}
-            style={tab === activeLoopTab ? { ...tabButtonStyle, ...activeTabButtonStyle } : tabButtonStyle}
+            className={`ds-tab ${tab === activeLoopTab ? 'active' : ''}`}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {LOOP_META[tab].icon}
@@ -225,12 +235,13 @@ export default function ControlLawPIDPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24, alignItems: 'start' }}>
-        <div style={panelStyle}>
+        <section className="section-card ds-fade-in">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h3 style={panelTitleStyle}>{meta.label}参数</h3>
+            <h3 className="ds-title" style={{ fontSize: 16, margin: 0 }}>{meta.label}参数</h3>
             <button
               onClick={() => setRollPitchLinked(!rollPitchLinked)}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
+              className="ds-button ghost"
+              style={{ padding: '6px 10px', fontSize: 12 }}
             >
               {rollPitchLinked ? <Link2 size={14} /> : <Link2Off size={14} />}
               {rollPitchLinked ? '滚转/俯仰联动' : '独立调节'}
@@ -242,7 +253,8 @@ export default function ControlLawPIDPage() {
               <button
                 key={i}
                 onClick={() => setActiveAxis(i as 0 | 1 | 2)}
-                style={i === activeAxis ? { ...axisButtonStyle, ...activeAxisButtonStyle } : axisButtonStyle}
+                className={`ds-tab ${i === activeAxis ? 'active' : ''}`}
+                style={{ flex: 1, justifyContent: 'center' }}
               >
                 {label}
               </button>
@@ -253,97 +265,47 @@ export default function ControlLawPIDPage() {
             const value = pidGains[g.key][activeAxis]
             return (
               <div key={g.key} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  <span>{g.label}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{value.toFixed(4)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{g.label}</span>
+                  <span className="ds-mono" style={{ fontSize: 13, color: 'var(--accent-primary)', fontWeight: 700, padding: '4px 8px', background: 'var(--accent-subtle)', borderRadius: 'var(--radius-md)' }}>{value.toFixed(4)}</span>
                 </div>
                 <input
                   type="range"
+                  className="ds-slider"
                   min={0}
                   max={g.max}
                   step={g.max / 200}
                   value={value}
                   onChange={e => setPidGain(g.key, activeAxis, Number(e.target.value))}
-                  style={{ width: '100%' }}
                 />
               </div>
             )
           })}
-        </div>
+        </section>
 
-        <div>
-          <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>阶跃响应</h3>
+        <div className="ds-stagger">
+          <section className="section-card" style={{ marginBottom: 16 }}>
+            <h3 className="ds-title" style={{ fontSize: 16, marginBottom: 12 }}>阶跃响应</h3>
             {result ? (
               <ReactECharts option={responseOption} style={{ height: 300 }} />
             ) : (
-              <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+              <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)' }}>
                 正在计算响应…
               </div>
             )}
-          </div>
-          <div style={panelStyle}>
-            <h3 style={panelTitleStyle}>控制量</h3>
+          </section>
+          <section className="section-card">
+            <h3 className="ds-title" style={{ fontSize: 16, marginBottom: 12 }}>控制量</h3>
             {result ? (
               <ReactECharts option={controlOption} style={{ height: 200 }} />
             ) : (
-              <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+              <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', background: 'var(--bg-primary)', borderRadius: 'var(--radius-lg)' }}>
                 正在计算控制量…
               </div>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </div>
   )
-}
-
-const tabButtonStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  borderRadius: 8,
-  border: '1px solid var(--border-default)',
-  background: 'var(--bg-surface)',
-  color: 'var(--text-secondary)',
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-
-const activeTabButtonStyle: React.CSSProperties = {
-  background: 'var(--accent-subtle)',
-  color: 'var(--accent-primary)',
-  borderColor: 'var(--accent-primary)',
-}
-
-const axisButtonStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '8px 0',
-  borderRadius: 6,
-  border: '1px solid var(--border-default)',
-  background: 'var(--bg-primary)',
-  color: 'var(--text-secondary)',
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-
-const activeAxisButtonStyle: React.CSSProperties = {
-  background: 'var(--accent-subtle)',
-  color: 'var(--accent-primary)',
-}
-
-const panelStyle: React.CSSProperties = {
-  background: 'var(--bg-surface)',
-  borderRadius: 16,
-  border: '1px solid var(--border-default)',
-  padding: 'var(--space-5)',
-  marginBottom: 16,
-}
-
-const panelTitleStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-display)',
-  fontSize: 16,
-  fontWeight: 700,
-  color: 'var(--text-primary)',
-  marginBottom: 12,
 }

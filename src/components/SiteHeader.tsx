@@ -13,8 +13,8 @@ const links: { label: string; href: string; route: AppRoute }[] = [
 
 export default function SiteHeader({ currentRoute }: SiteHeaderProps) {
   return (
-    <header style={headerStyle}>
-      <a href="#/" style={brandStyle}>
+    <header style={headerStyle} className="ds-nav-material">
+      <a href="#/" style={brandStyle} className="apple-press">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2L2 7l10 5 10-5-10-5z" />
           <path d="M2 17l10 5 10-5" />
@@ -29,6 +29,7 @@ export default function SiteHeader({ currentRoute }: SiteHeaderProps) {
             <a
               key={item.href}
               href={item.href}
+              className="apple-press"
               style={active ? { ...navLinkStyle, ...activeNavLinkStyle } : navLinkStyle}
             >
               {item.label}
@@ -45,9 +46,6 @@ const headerStyle: React.CSSProperties = {
   top: 0,
   zIndex: 100,
   height: 56,
-  background: 'rgba(255,255,255,0.92)',
-  backdropFilter: 'blur(12px)',
-  borderBottom: '1px solid var(--border-default)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',

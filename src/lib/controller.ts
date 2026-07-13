@@ -271,7 +271,7 @@ export class CascadedController {
     const R = quatToRotationMatrix(state.quaternion as Quaternion)
 
     // ========== Position/velocity loops (full cascade) ==========
-    let totalThrust = 0
+    let totalThrust: number
     let R_d: Mat3
     let F_c_ned: V3 = [0, 0, 0]
 
