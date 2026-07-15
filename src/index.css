@@ -502,3 +502,365 @@ article .tex-block + h3.theory-heading {
 .katex {
   font-size: 1.05em;
 }
+
+/* ===== Python simulation workbench ===== */
+.sim-workbench {
+  max-width: 1440px;
+  padding: 24px;
+}
+
+.sim-shell {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.72fr) minmax(520px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sim-topbar {
+  position: sticky;
+  top: 72px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(360px, 1.25fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(18px) saturate(160%);
+}
+
+.sim-titlebar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.sim-mark {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #0f766e;
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+}
+
+.sim-heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.sim-subtitle {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sim-topbar-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.sim-topbar-mode {
+  min-width: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out), color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+
+.sim-topbar-mode:hover {
+  color: var(--text-primary);
+  border-color: #94a3b8;
+}
+
+.sim-topbar-mode:active {
+  transform: scale(0.98);
+}
+
+.sim-topbar-mode.active {
+  color: #1d4ed8;
+  background: #eef6ff;
+  border-color: #93c5fd;
+}
+
+.sim-topbar-mode span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.sim-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sim-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.sim-panel-subtitle {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sim-panel-body {
+  padding: 16px;
+}
+
+.sim-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sim-mode-card {
+  min-height: 74px;
+  padding: 11px;
+  text-align: left;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+
+.sim-mode-card:hover {
+  border-color: #94a3b8;
+}
+
+.sim-mode-card:active {
+  transform: scale(0.98);
+}
+
+.sim-mode-card.active {
+  background: #eef6ff;
+  border-color: #93c5fd;
+}
+
+.sim-mode-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sim-mode-meta {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.sim-config-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.sim-field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sim-editor-frame {
+  overflow: hidden;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  background: #0f172a;
+}
+
+.sim-editor-frame .cm-editor {
+  font-size: 13px;
+}
+
+.sim-viewer {
+  min-width: 0;
+}
+
+.sim-viewer .sim-panel-body {
+  padding: 0;
+}
+
+.sim-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sim-stat {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.sim-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sim-stat-value {
+  margin-top: 5px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sim-status-pill.idle,
+.sim-status-pill.running {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.sim-status-pill.complete {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.sim-status-pill.error {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.sim-log {
+  min-height: 156px;
+  max-height: 220px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  color: #cbd5e1;
+  background: #0f172a;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.sim-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(360px, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1180px) {
+  .sim-shell,
+  .sim-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sim-topbar {
+    position: static;
+    grid-template-columns: 1fr;
+  }
+
+  .sim-topbar-modes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sim-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .sim-workbench {
+    padding: 16px;
+  }
+
+  .sim-mode-grid,
+  .sim-topbar-modes,
+  .sim-stat-grid,
+  .sim-config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sim-actions .ds-button,
+  .sim-actions label {
+    width: 100%;
+  }
+
+  .sim-actions .ds-button {
+    justify-content: center;
+  }
+}

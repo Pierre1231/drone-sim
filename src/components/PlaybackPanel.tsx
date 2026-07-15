@@ -9,6 +9,13 @@ import { samplePlayback } from '@/lib/playbackSampler'
 
 const ARM_LENGTH = 0.15
 const ARM_LEN = Math.sqrt(2) * ARM_LENGTH
+const ASTAR_OBSTACLE_HEIGHT = 5
+
+export interface PlaybackSceneOverlay {
+  obstacles?: [number, number][]
+  start?: [number, number]
+  goal?: [number, number]
+}
 
 const MOTOR_POSITIONS: [number, number, number][] = [
   [ARM_LENGTH, 0, ARM_LENGTH],
@@ -225,6 +232,50 @@ const RefTrajectoryLine = memo(function RefTrajectoryLine({ positions }: { posit
   )
 })
 
+const AstarSceneOverlay = memo(function AstarSceneOverlay({ scene }: { scene?: PlaybackSceneOverlay }) {
+  if (!scene) return null
+  const obstacles = scene.obstacles ?? []
+
+  return (
+    <group>
+      {obstacles.map(([x, y]) => (
+        <group key={`${x}:${y}`} position={[x, ASTAR_OBSTACLE_HEIGHT / 2, y]}>
+          <mesh>
+            <boxGeometry args={[0.86, ASTAR_OBSTACLE_HEIGHT, 0.86]} />
+            <meshStandardMaterial color="#ef4444" transparent opacity={0.34} roughness={0.7} />
+          </mesh>
+          <mesh position={[0, ASTAR_OBSTACLE_HEIGHT / 2 + 0.012, 0]}>
+            <boxGeometry args={[0.88, 0.024, 0.88]} />
+            <meshStandardMaterial color="#b91c1c" transparent opacity={0.76} />
+          </mesh>
+        </group>
+      ))}
+
+      {scene.start && (
+        <group position={[scene.start[0], 0.04, scene.start[1]]}>
+          <mesh>
+            <cylinderGeometry args={[0.34, 0.34, 0.08, 32]} />
+            <meshStandardMaterial color="#10b981" transparent opacity={0.78} />
+          </mesh>
+        </group>
+      )}
+
+      {scene.goal && (
+        <group position={[scene.goal[0], 0.08, scene.goal[1]]}>
+          <mesh>
+            <cylinderGeometry args={[0.38, 0.38, 0.12, 32]} />
+            <meshStandardMaterial color="#2563eb" transparent opacity={0.82} />
+          </mesh>
+          <mesh position={[0, 0.58, 0]}>
+            <coneGeometry args={[0.24, 0.56, 32]} />
+            <meshStandardMaterial color="#1d4ed8" />
+          </mesh>
+        </group>
+      )}
+    </group>
+  )
+})
+
 /** Follow-camera controller with a smooth inertial spherical offset. */
 function CameraController({
   followMode,
@@ -294,7 +345,7 @@ function formatTime(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export default function PlaybackPanel() {
+export default function PlaybackPanel({ scene }: { scene?: PlaybackSceneOverlay }) {
   const { status, result } = useSimStore()
   const [playbackTime, setPlaybackTime] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -380,8 +431,8 @@ export default function PlaybackPanel() {
       }}>
         <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
           <Package size={64} style={{ display: 'block', margin: '0 auto var(--space-4)', opacity: 0.5 }} strokeWidth={1.5} />
-          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>等待仿真开始</h3>
-          <p style={{ fontSize: 14, opacity: 0.7 }}>在上方配置区选择部件并点击开始仿真</p>
+          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 'var(--space-2)' }}>等待运行</h3>
+          <p style={{ fontSize: 14, opacity: 0.7 }}>选择模式后运行 Python 控制器</p>
         </div>
       </div>
     )
@@ -474,6 +525,7 @@ export default function PlaybackPanel() {
           <ambientLight intensity={0.5} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
           <Grid args={[40, 40]} cellSize={1} cellThickness={0.5} cellColor="#94a3b8" />
+          <AstarSceneOverlay scene={scene} />
           <DroneModel
             position={pos}
             quaternion={quat}
@@ -514,7 +566,7 @@ export default function PlaybackPanel() {
 
       {/* Playback Controls */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
+        display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap',
         padding: 'var(--space-4) var(--space-6)',
         background: '#ffffff',
         borderTop: '1px solid var(--border-default)',
@@ -561,7 +613,7 @@ export default function PlaybackPanel() {
           step={Math.max(totalTime / 1000, 0.01)}
           value={playbackTime}
           onChange={e => { setPlaybackTime(Number(e.target.value)); setIsPlaying(false) }}
-          style={{ flex: 1, margin: '0 var(--space-2)', accentColor: 'var(--accent-primary)' }}
+          style={{ flex: '1 1 220px', minWidth: 180, margin: '0 var(--space-2)', accentColor: 'var(--accent-primary)' }}
         />
 
         <span style={{
@@ -571,7 +623,7 @@ export default function PlaybackPanel() {
           {formatTime(timeSec)} / {formatTime(totalTime)}
         </span>
 
-        <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
           {[0.5, 1, 2, 4].map(speed => (
             <button key={speed} onClick={() => setPlaybackSpeed(speed)} style={{
               padding: 'var(--space-2) var(--space-3)', background: 'transparent',

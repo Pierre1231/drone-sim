@@ -20,6 +20,10 @@ export interface Setpoint {
   controlMode?: 'full' | 'attitude' | 'rate'
 }
 
+export interface Mission {
+  getSetpoint(time: number, batteryState?: { soc: number }): Setpoint
+}
+
 export interface HoverMissionParams {
   targetAltitude: number
   takeoffDuration: number

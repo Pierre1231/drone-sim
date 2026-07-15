@@ -11,4 +11,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    exclude: ['pyodide'],
+  },
+  worker: {
+    format: 'es',
+  },
+  assetsInclude: ['**/*.wasm'],
 })

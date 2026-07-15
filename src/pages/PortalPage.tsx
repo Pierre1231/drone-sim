@@ -63,7 +63,7 @@ export default function PortalPage() {
             <ModeCard
               icon={<Gauge size={32} color="var(--accent-primary)" />}
               title="仿真模式"
-              description="运行完整六自由度仿真，回放飞行过程，对比文档工况。功能持续完善中。"
+              description="编写 Python 控制器，在完整六自由度动力学中实时驱动无人机，完成悬停、圆轨迹等任务并回放飞行过程。"
               href="#/simulation"
             />
             <ModeCard

@@ -1,14 +1,15 @@
 import { integrate, createState, quatToEuler, type ForcesAndMoments } from './dynamics'
+import type { DroneState } from './dynamics'
 import { BatteryModel, MotorModel, ESCModel } from './components'
 import type { BatteryParams, MotorParams, ESCParams } from './components'
 import { PropellerModel, ControlAllocator } from './propulsion'
 import { Environment } from './environment'
 import type { WindModelParams } from './environment'
 import { LowSpeedDrag, AerodynamicDamping, computeDragMomentArm } from './aerodynamics'
-import { HoverMission, CircleMission, FullSpeedMission, StepPositionMission, StepVelocityMission, StepAttitudeMission, StepRateMission } from './mission'
+import { HoverMission, CircleMission, FullSpeedMission, StepPositionMission, StepVelocityMission, StepAttitudeMission, StepRateMission, type Mission } from './mission'
 import { CascadedController, createDocumentControllerGains } from './controller'
 import type { DroneConfig } from '@/store/configStore'
-import type { ControllerGains, Mat3 } from './controller'
+import type { ControllerGains, ControllerLimits, Mat3 } from './controller'
 import { cross, rotateNedToBody, rotateBodyToNed } from './coordinates'
 import {
   computeRotorAngularMomentum,
@@ -64,10 +65,25 @@ export interface SimConfig {
     motorCurrents?: [number, number, number, number] // A
     dutyCycles?: [number, number, number, number]
   }
+  /** Optional callback invoked at the start of every fast simulation step with the current state. */
+  onStep?: (state: DroneState, time: number) => void
+  /** Optional custom mission. When provided, overrides missionType-based mission creation. */
+  mission?: Mission
+  /**
+   * Optional direct control input. When provided, this bypasses CascadedController
+   * and supplies total thrust plus body moments directly to the allocator.
+   */
+  directControl?: (state: DroneState, time: number, dt: number) => {
+    totalThrust: number
+    moments: [number, number, number]
+    refPosition?: [number, number, number]
+  }
   /** Maximum simulation time (s). Default 1200. */
   maxSimTime?: number
   /** Optional controller gains. Defaults to document gains. */
   controllerGains?: ControllerGains
+  /** Optional controller output limits. Defaults to mission-specific document limits. */
+  controllerLimits?: ControllerLimits
 }
 
 export interface SimResult {
@@ -219,33 +235,35 @@ export function runSimulation(
   const controller = new CascadedController({
     mass: totalMass,
     gains: config.controllerGains ?? createDocumentControllerGains(),
-    limits: controllerLimits,
+    limits: config.controllerLimits ?? controllerLimits,
   })
 
   // Mission
-  const mission = (mt === 'hover' || mt === 'test-hover')
-    ? new HoverMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, batteryCutoffSoc: 0.2 })
-    : (mt === 'circle' || mt === 'test-circle' || mt === 'test-circle-7')
-      ? new CircleMission({
-          targetAltitude: mp.targetAltitude ?? 5,
-          takeoffDuration: mp.takeoffDuration ?? defaultTakeoff,
-          hoverDuration: mp.hoverDuration ?? defaultHover,
-          radius: mp.radius ?? 5,
-          speed: mp.speed ?? (mt === 'test-circle-7' ? 7 : 2),
-          batteryCutoffSoc: 0.2,
-          angularRateFeedforward: mt === 'test-circle-7',
-        })
-      : mt === 'fullspeed'
-        ? new FullSpeedMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, hoverDuration: mp.hoverDuration ?? defaultHover, speed: mp.speed ?? 5, batteryCutoffSoc: 0.2 })
-        : mt === 'step-position'
-          ? new StepPositionMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
-          : mt === 'step-velocity'
-            ? new StepVelocityMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
-            : mt === 'step-attitude'
-              ? new StepAttitudeMission({ stepTime: 0.5, amplitudeRad: 5 * Math.PI / 180, axis: 1 })
-              : mt === 'step-rate'
-                ? new StepRateMission({ stepTime: 0.5, amplitude: 0.5, axis: 0 })
-                : new HoverMission({ targetAltitude: 5, takeoffDuration: defaultTakeoff, batteryCutoffSoc: 0.2 })
+  const mission = config.mission ?? (
+    (mt === 'hover' || mt === 'test-hover')
+      ? new HoverMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, batteryCutoffSoc: 0.2 })
+      : (mt === 'circle' || mt === 'test-circle' || mt === 'test-circle-7')
+        ? new CircleMission({
+            targetAltitude: mp.targetAltitude ?? 5,
+            takeoffDuration: mp.takeoffDuration ?? defaultTakeoff,
+            hoverDuration: mp.hoverDuration ?? defaultHover,
+            radius: mp.radius ?? 5,
+            speed: mp.speed ?? (mt === 'test-circle-7' ? 7 : 2),
+            batteryCutoffSoc: 0.2,
+            angularRateFeedforward: mt === 'test-circle-7',
+          })
+        : mt === 'fullspeed'
+          ? new FullSpeedMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, hoverDuration: mp.hoverDuration ?? defaultHover, speed: mp.speed ?? 5, batteryCutoffSoc: 0.2 })
+          : mt === 'step-position'
+            ? new StepPositionMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
+            : mt === 'step-velocity'
+              ? new StepVelocityMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
+              : mt === 'step-attitude'
+                ? new StepAttitudeMission({ stepTime: 0.5, amplitudeRad: 5 * Math.PI / 180, axis: 1 })
+                : mt === 'step-rate'
+                  ? new StepRateMission({ stepTime: 0.5, amplitude: 0.5, axis: 0 })
+                  : new HoverMission({ targetAltitude: 5, takeoffDuration: defaultTakeoff, batteryCutoffSoc: 0.2 })
+  )
 
   let state = createState({ mass: totalMass })
   if (config.initialState) {
@@ -300,6 +318,8 @@ export function runSimulation(
   while (simTime < maxSimTime) {
     if (shouldCancel && shouldCancel()) break
 
+    config.onStep?.(state, simTime)
+
     const setpoint = mission.getSetpoint(simTime, { soc: battery.getSOC() })
 
     if ((config.missionType === 'test-hover' || config.missionType === 'hover' || config.missionType === 'fullspeed' || config.missionType === 'test-circle' || config.missionType === 'circle' || config.missionType === 'test-circle-7') && setpoint.landing) {
@@ -326,26 +346,35 @@ export function runSimulation(
     const dragBody = drag.compute(vaBody, airDensity)
     const aeroForceNed = rotateBodyToNed(dragBody, state.quaternion)
 
-    // Controller
-    const ctrlOut = controller.update(
-      {
-        position: setpoint.position,
-        velocity: setpoint.velocity,
-        acceleration: setpoint.acceleration,
-        heading: setpoint.heading,
-        angularVelocity: setpoint.angularVelocity,
-        attitude: setpoint.attitude as Mat3 | undefined,
-        controlMode: setpoint.controlMode,
-      },
-      {
-        position: state.position,
-        velocity: state.velocity,
-        quaternion: state.quaternion,
-        angularVelocity: state.angularVelocity,
-      },
-      dt,
-      { aeroForceNed: aeroForceNed as unknown as [number, number, number] }
-    )
+    const directCommand = config.directControl?.(state, simTime, dt)
+    const refPositionForLog = directCommand?.refPosition ?? setpoint.position
+
+    // Controller. Python direct-control demos bypass the built-in cascaded
+    // controller but still use allocation, propulsion, battery and dynamics.
+    const ctrlOut = directCommand
+      ? {
+          totalThrust: Math.max(0, directCommand.totalThrust),
+          moments: directCommand.moments,
+        }
+      : controller.update(
+          {
+            position: setpoint.position,
+            velocity: setpoint.velocity,
+            acceleration: setpoint.acceleration,
+            heading: setpoint.heading,
+            angularVelocity: setpoint.angularVelocity,
+            attitude: setpoint.attitude as Mat3 | undefined,
+            controlMode: setpoint.controlMode,
+          },
+          {
+            position: state.position,
+            velocity: state.velocity,
+            quaternion: state.quaternion,
+            angularVelocity: state.angularVelocity,
+          },
+          dt,
+          { aeroForceNed: aeroForceNed as unknown as [number, number, number] }
+        )
 
     // Control allocation with saturation limits
     const busVoltage = battery.getTerminalVoltage()
@@ -517,7 +546,7 @@ export function runSimulation(
       result.power.push(busVoltage * iBat)
       result.soc.push(battery.getSOC())
       result.totalThrust.push(totalThrust)
-      result.refPosition.push([...setpoint.position])
+      result.refPosition.push([...refPositionForLog])
       nextLogTime += logInterval
     }
 
