@@ -106,7 +106,7 @@ export default function TheoryPage() {
         )}
 
         <main style={mainStyle}>
-          <article style={{ width: '100%', maxWidth: 880, margin: '0 auto', padding: showLeftRail ? '40px 48px 120px' : '28px 20px 100px' }}>
+          <article className="ds-fade-in" style={{ width: '100%', maxWidth: 880, margin: '0 auto', padding: showLeftRail ? '40px 48px 120px' : '28px 20px 100px' }}>
             <DocHeader />
             <CoordinateSystem />
             <Kinematics />

@@ -50,9 +50,7 @@ export default function LineSidebar({
   markerColor = '#6c6c6c',
   showIndex = true,
   showMarker = true,
-  proximityRadius: _proximityRadius = 100,
   maxShift = 30,
-  falloff: _falloff = 'smooth',
   markerLength = 60,
   markerGap = 0,
   tickScale = 0.5,
@@ -77,38 +75,43 @@ export default function LineSidebar({
   const activeIndex = isControlled ? activeIndexProp : activeIndexState
 
   const smoothingRef = useRef(smoothing)
+  const runFrameRef = useRef<(now: number) => void>(() => {})
 
-  smoothingRef.current = smoothing
+  useEffect(() => {
+    smoothingRef.current = smoothing
+  }, [smoothing])
 
-  const runFrame = useCallback((now: number) => {
-    const dt = Math.min((now - lastRef.current) / 1000, 0.05)
-    lastRef.current = now
-    const tau = Math.max(smoothingRef.current, 1) / 1000
-    const k = 1 - Math.exp(-dt / tau)
+  useEffect(() => {
+    runFrameRef.current = (now: number) => {
+      const dt = Math.min((now - lastRef.current) / 1000, 0.05)
+      lastRef.current = now
+      const tau = Math.max(smoothingRef.current, 1) / 1000
+      const k = 1 - Math.exp(-dt / tau)
 
-    let moving = false
-    const itemElements = itemRefs.current
-    for (let i = 0; i < itemElements.length; i++) {
-      const el = itemElements[i]
-      if (!el) continue
-      const target = targetsRef.current[i] || 0
-      const cur = currentRef.current[i] || 0
-      const next = cur + (target - cur) * k
-      const settled = Math.abs(target - next) < 0.0015
-      const value = settled ? target : next
-      currentRef.current[i] = value
-      el.style.setProperty('--js-effect', value.toFixed(4))
-      if (!settled) moving = true
+      let moving = false
+      const itemElements = itemRefs.current
+      for (let i = 0; i < itemElements.length; i++) {
+        const el = itemElements[i]
+        if (!el) continue
+        const target = targetsRef.current[i] || 0
+        const cur = currentRef.current[i] || 0
+        const next = cur + (target - cur) * k
+        const settled = Math.abs(target - next) < 0.0015
+        const value = settled ? target : next
+        currentRef.current[i] = value
+        el.style.setProperty('--js-effect', value.toFixed(4))
+        if (!settled) moving = true
+      }
+
+      rafRef.current = moving ? requestAnimationFrame(runFrameRef.current) : null
     }
-
-    rafRef.current = moving ? requestAnimationFrame(runFrame) : null
   }, [])
 
   const startLoop = useCallback(() => {
     if (rafRef.current != null) return
     lastRef.current = performance.now()
-    rafRef.current = requestAnimationFrame(runFrame)
-  }, [runFrame])
+    rafRef.current = requestAnimationFrame(runFrameRef.current)
+  }, [])
 
   const updateTargets = useCallback(
     (clientY: number) => {
