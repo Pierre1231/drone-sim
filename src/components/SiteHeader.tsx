@@ -42,8 +42,10 @@ export default function SiteHeader({ currentRoute }: SiteHeaderProps) {
 }
 
 const headerStyle: React.CSSProperties = {
-  position: 'sticky',
+  position: 'fixed',
   top: 0,
+  left: 0,
+  right: 0,
   zIndex: 100,
   height: 56,
   display: 'flex',

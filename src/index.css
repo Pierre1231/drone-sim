@@ -101,11 +101,12 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 body {
   margin: 0;
-  padding: 0;
+  padding: 56px 0 0;
   font-family: var(--font-body);
   background: var(--bg-primary);
   color: var(--text-primary);
