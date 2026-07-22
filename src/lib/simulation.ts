@@ -80,6 +80,10 @@ export interface SimConfig {
   }
   /** Maximum simulation time (s). Default 1200. */
   maxSimTime?: number
+  /** Axis used by step-response missions: 0=x/roll, 1=y/pitch, 2=z/yaw. */
+  stepAxis?: 0 | 1 | 2
+  /** Amplitude used by step-response missions, expressed in the selected loop's native unit. */
+  stepAmplitude?: number
   /** Optional controller gains. Defaults to document gains. */
   controllerGains?: ControllerGains
   /** Optional controller output limits. Defaults to mission-specific document limits. */
@@ -101,6 +105,16 @@ export interface SimResult {
   soc: number[]
   totalThrust: number[]
   refPosition: number[][]
+  /** Controller command before allocation (N). */
+  commandedThrust?: number[]
+  /** Controller body-moment command before allocation (N·m). */
+  commandedMoments?: number[][]
+  /** Internal velocity command passed to the velocity loop (NED, m/s). */
+  desiredVelocity?: number[][]
+  /** Internal acceleration command from the velocity loop (NED, m/s²). */
+  desiredAcceleration?: number[][]
+  /** Internal angular-rate command passed to the rate loop (rad/s). */
+  desiredAngularVelocity?: number[][]
 }
 
 export interface SimProgress {
@@ -214,6 +228,7 @@ export function runSimulation(
   const inertia: [number, number, number] = [config.inertia[0], config.inertia[1], config.inertia[2]]
   const mp = config.missionParams ?? {}
   const mt = config.missionType
+  const stepAxis = config.stepAxis ?? 0
   const isTestMission = mt.startsWith('test-')
   const defaultTakeoff = isTestMission ? 0 : 5
   const defaultHover = isTestMission ? 0 : 3
@@ -255,13 +270,13 @@ export function runSimulation(
         : mt === 'fullspeed'
           ? new FullSpeedMission({ targetAltitude: mp.targetAltitude ?? 5, takeoffDuration: mp.takeoffDuration ?? defaultTakeoff, hoverDuration: mp.hoverDuration ?? defaultHover, speed: mp.speed ?? 5, batteryCutoffSoc: 0.2 })
           : mt === 'step-position'
-            ? new StepPositionMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
+            ? new StepPositionMission({ stepTime: 0.5, amplitude: config.stepAmplitude ?? 1, axis: stepAxis })
             : mt === 'step-velocity'
-              ? new StepVelocityMission({ stepTime: 0.5, amplitude: 1, axis: 0 })
+              ? new StepVelocityMission({ stepTime: 0.5, amplitude: config.stepAmplitude ?? 1, axis: stepAxis })
               : mt === 'step-attitude'
-                ? new StepAttitudeMission({ stepTime: 0.5, amplitudeRad: 5 * Math.PI / 180, axis: 1 })
+                ? new StepAttitudeMission({ stepTime: 0.5, amplitudeRad: config.stepAmplitude ?? 5 * Math.PI / 180, axis: stepAxis })
                 : mt === 'step-rate'
-                  ? new StepRateMission({ stepTime: 0.5, amplitude: 0.5, axis: 0 })
+                  ? new StepRateMission({ stepTime: 0.5, amplitude: config.stepAmplitude ?? 0.5, axis: stepAxis })
                   : new HoverMission({ targetAltitude: 5, takeoffDuration: defaultTakeoff, batteryCutoffSoc: 0.2 })
   )
 
@@ -275,7 +290,30 @@ export function runSimulation(
     }
   }
 
-  const initialPropulsion = config.initialPropulsionState
+  let initialPropulsion = config.initialPropulsionState
+  if (!initialPropulsion && mt.startsWith('step-')) {
+    const airDensity = environment.getDensity(state.position)
+    const thrustPerRotor = totalMass * 9.81 / 4
+    const hoverOmega = prop.getTargetOmega(thrustPerRotor, airDensity, 0)
+    const hoverProp = prop.compute(0, hoverOmega, airDensity)
+    const frictionTorque = (config.motorParams.noLoadCurrent ?? 0) * config.motorParams.torqueCoeff
+    const hoverCurrent = (
+      hoverProp.torque + config.motorParams.viscousDamping * hoverOmega + frictionTorque
+    ) / Math.max(config.motorParams.torqueCoeff, 1e-9)
+    const busVoltage = battery.getTerminalVoltage()
+    const escDrop = hoverCurrent * (
+      (config.escParams.resistance ?? 0) +
+      (config.escParams.wireResistance ?? 0) +
+      (config.escParams.switchingLossCoeff ?? 0) * (config.escParams.pwmFrequency ?? 0)
+    )
+    const motorVoltage = config.motorParams.backEmfCoeff * hoverOmega + config.motorParams.resistance * hoverCurrent
+    const hoverDuty = Math.max(0, Math.min(1, (motorVoltage + escDrop) / Math.max(busVoltage, 1e-6)))
+    initialPropulsion = {
+      motorSpeeds: [hoverOmega, hoverOmega, hoverOmega, hoverOmega],
+      motorCurrents: [hoverCurrent, hoverCurrent, hoverCurrent, hoverCurrent],
+      dutyCycles: [hoverDuty, hoverDuty, hoverDuty, hoverDuty],
+    }
+  }
   if (initialPropulsion) {
     const motorSpeeds = initialPropulsion.motorSpeeds
     const motorCurrents = initialPropulsion.motorCurrents
@@ -310,6 +348,8 @@ export function runSimulation(
     motorSpeeds: [], motorCurrents: [], thrusts: [],
     voltage: [], current: [], power: [], soc: [], totalThrust: [],
     refPosition: [],
+    commandedThrust: [], commandedMoments: [],
+    desiredVelocity: [], desiredAcceleration: [], desiredAngularVelocity: [],
   }
 
   let prevMotorSpeeds = initialPropulsion?.motorSpeeds ? [...initialPropulsion.motorSpeeds] : [0, 0, 0, 0]
@@ -547,6 +587,11 @@ export function runSimulation(
       result.soc.push(battery.getSOC())
       result.totalThrust.push(totalThrust)
       result.refPosition.push([...refPositionForLog])
+      result.commandedThrust?.push(ctrlOut.totalThrust)
+      result.commandedMoments?.push([...ctrlOut.moments])
+      result.desiredVelocity?.push('desiredVelocity' in ctrlOut ? [...ctrlOut.desiredVelocity] : [0, 0, 0])
+      result.desiredAcceleration?.push('desiredAcceleration' in ctrlOut ? [...ctrlOut.desiredAcceleration] : [0, 0, 0])
+      result.desiredAngularVelocity?.push('desiredAngularVelocity' in ctrlOut ? [...ctrlOut.desiredAngularVelocity] : [0, 0, 0])
       nextLogTime += logInterval
     }
 

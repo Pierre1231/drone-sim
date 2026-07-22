@@ -17,7 +17,7 @@ export interface Setpoint {
   /** Desired attitude rotation matrix R_d. Used with controlMode='attitude'. */
   attitude?: RotationMatrix
   /** Control mode passed to the cascaded controller. */
-  controlMode?: 'full' | 'attitude' | 'rate'
+  controlMode?: 'full' | 'velocity' | 'attitude' | 'rate'
 }
 
 export interface Mission {
@@ -330,6 +330,7 @@ export class StepVelocityMission {
 
   getSetpoint(time: number): Setpoint {
     const sp = stepZeroSetpoint()
+    sp.controlMode = 'velocity'
     if (time >= this.stepTime) {
       sp.velocity[this.axis] = this.amplitude
     }

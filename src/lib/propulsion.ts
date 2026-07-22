@@ -499,6 +499,8 @@ export interface PIDParams {
   kd: number
   outputMin?: number
   outputMax?: number
+  /** First-order low-pass time constant for the derivative term (s). */
+  derivativeFilterTimeConstant?: number
 }
 
 export class PIDController {
@@ -509,6 +511,9 @@ export class PIDController {
   private outputMax: number
   private integral: number
   private prevError: number | null
+  private prevMeasurement: number | null
+  private filteredDerivative: number
+  private derivativeFilterTimeConstant: number
 
   constructor(params: PIDParams) {
     this.kp = params.kp
@@ -518,9 +523,12 @@ export class PIDController {
     this.outputMax = params.outputMax ?? Infinity
     this.integral = 0
     this.prevError = null
+    this.prevMeasurement = null
+    this.filteredDerivative = 0
+    this.derivativeFilterTimeConstant = Math.max(0, params.derivativeFilterTimeConstant ?? 0)
   }
 
-  update(error: number, dt: number): number {
+  update(error: number, dt: number, measurement?: number): number {
     // Proportional
     const P = this.kp * error
 
@@ -530,10 +538,27 @@ export class PIDController {
 
     // Derivative
     let D = 0
-    if (this.prevError !== null && dt > 0) {
-      D = this.kd * (error - this.prevError) / dt
+    if (dt > 0) {
+      let rawDerivative = 0
+      let hasDerivative = false
+      if (measurement !== undefined && this.prevMeasurement !== null) {
+        // Derivative on measurement avoids a spike when the setpoint steps.
+        rawDerivative = -(measurement - this.prevMeasurement) / dt
+        hasDerivative = true
+      } else if (measurement === undefined && this.prevError !== null) {
+        rawDerivative = (error - this.prevError) / dt
+        hasDerivative = true
+      }
+      if (hasDerivative) {
+        const alpha = this.derivativeFilterTimeConstant > 0
+          ? dt / (this.derivativeFilterTimeConstant + dt)
+          : 1
+        this.filteredDerivative += alpha * (rawDerivative - this.filteredDerivative)
+        D = this.kd * this.filteredDerivative
+      }
     }
     this.prevError = error
+    if (measurement !== undefined) this.prevMeasurement = measurement
 
     // Output with saturation
     const output = P + I + D
@@ -551,5 +576,7 @@ export class PIDController {
   reset(): void {
     this.integral = 0
     this.prevError = null
+    this.prevMeasurement = null
+    this.filteredDerivative = 0
   }
 }

@@ -21,7 +21,19 @@ interface ControllerStore {
   reset: () => void
 }
 
-const defaultGains = createDocumentControllerGains()
+const documentGains = createDocumentControllerGains()
+
+// Conservative horizontal gains for the interactive step-response tuner.
+// They keep the fixed propulsion/dynamics model inside its small-angle region,
+// so position overshoot is followed by a visible return toward the target.
+const defaultGains: ControllerGains = {
+  ...documentGains,
+  positionKp: [0.5, 0.5, 0.5],
+  positionKi: [0, 0, 0],
+  velocityKp: [0.5, 0.5, 0.5],
+  velocityKi: [0, 0, 0],
+  velocityKd: [0.02, 0.02, 0.02],
+}
 
 export const useControllerStore = create<ControllerStore>((set) => ({
   activeLaw: 'pid',

@@ -66,8 +66,8 @@ export interface ControllerSetpoint {
   angularVelocity?: V3 // body frame (rad/s)
   /** Desired attitude rotation matrix R_d. When supplied with controlMode='attitude' the position/velocity loops are bypassed. */
   attitude?: Mat3
-  /** Control mode: full cascade (default), attitude-only, or rate-only. */
-  controlMode?: 'full' | 'attitude' | 'rate'
+  /** Control mode: full cascade (default), velocity, attitude, or rate. */
+  controlMode?: 'full' | 'velocity' | 'attitude' | 'rate'
 }
 
 export interface ControllerStateEstimate {
@@ -88,6 +88,12 @@ export interface ControllerOutput {
   desiredRotationMatrix: Mat3
   /** Rotation-matrix attitude error e_R. */
   attitudeError: V3
+  /** Velocity command passed to the velocity loop (NED, m/s). */
+  desiredVelocity: V3
+  /** Acceleration command produced by the velocity loop (NED, m/s²). */
+  desiredAcceleration: V3
+  /** Angular-velocity command passed to the rate loop (body, rad/s). */
+  desiredAngularVelocity: V3
 }
 
 const G = 9.81
@@ -222,7 +228,7 @@ export class CascadedController {
     ) as PIDController[]
 
     this.velPids = gains.velocityKp.map((kp, i) =>
-      new PIDController({ kp, ki: gains.velocityKi[i], kd: gains.velocityKd[i], outputMin: -maxAcc[i], outputMax: maxAcc[i] })
+      new PIDController({ kp, ki: gains.velocityKi[i], kd: gains.velocityKd[i], outputMin: -maxAcc[i], outputMax: maxAcc[i], derivativeFilterTimeConstant: 0.02 })
     ) as PIDController[]
 
     this.attPids = gains.attitudeKp.map((kp, i) =>
@@ -230,7 +236,7 @@ export class CascadedController {
     ) as PIDController[]
 
     this.ratePids = gains.rateKp.map((kp, i) =>
-      new PIDController({ kp, ki: gains.rateKi[i], kd: gains.rateKd[i], outputMin: -maxMoment[i], outputMax: maxMoment[i] })
+      new PIDController({ kp, ki: gains.rateKi[i], kd: gains.rateKd[i], outputMin: -maxMoment[i], outputMax: maxMoment[i], derivativeFilterTimeConstant: 0.005 })
     ) as PIDController[]
   }
 
@@ -274,23 +280,29 @@ export class CascadedController {
     let totalThrust: number
     let R_d: Mat3
     let F_c_ned: V3 = [0, 0, 0]
+    let v_c: V3 = [0, 0, 0]
+    let a_c: V3 = [0, 0, 0]
 
-    if (mode === 'full') {
+    if (mode === 'full' || mode === 'velocity') {
       const v_d: V3 = setpoint.velocity ?? [0, 0, 0]
       const a_ff: V3 = setpoint.acceleration ?? [0, 0, 0]
 
-      const e_p = v3Sub(setpoint.position, state.position)
-      const v_c: V3 = [
-        v_d[0] + this.posPids[0].update(e_p[0], dt),
-        v_d[1] + this.posPids[1].update(e_p[1], dt),
-        v_d[2] + this.posPids[2].update(e_p[2], dt),
-      ]
+      if (mode === 'full') {
+        const e_p = v3Sub(setpoint.position, state.position)
+        v_c = [
+          v_d[0] + this.posPids[0].update(e_p[0], dt),
+          v_d[1] + this.posPids[1].update(e_p[1], dt),
+          v_d[2] + this.posPids[2].update(e_p[2], dt),
+        ]
+      } else {
+        v_c = [...v_d]
+      }
 
       const e_v = v3Sub(v_c, state.velocity)
-      const a_c: V3 = [
-        a_ff[0] + this.velPids[0].update(e_v[0], dt),
-        a_ff[1] + this.velPids[1].update(e_v[1], dt),
-        a_ff[2] + this.velPids[2].update(e_v[2], dt),
+      a_c = [
+        a_ff[0] + this.velPids[0].update(e_v[0], dt, state.velocity[0]),
+        a_ff[1] + this.velPids[1].update(e_v[1], dt, state.velocity[1]),
+        a_ff[2] + this.velPids[2].update(e_v[2], dt, state.velocity[2]),
       ]
 
       F_c_ned = [
@@ -377,9 +389,9 @@ export class CascadedController {
     // ========== Angular velocity loop (PID) ==========
     const e_omega = v3Sub(omega_c, state.angularVelocity)
     const moments: V3 = [
-      this.ratePids[0].update(e_omega[0], dt),
-      this.ratePids[1].update(e_omega[1], dt),
-      this.ratePids[2].update(e_omega[2], dt),
+      this.ratePids[0].update(e_omega[0], dt, state.angularVelocity[0]),
+      this.ratePids[1].update(e_omega[1], dt, state.angularVelocity[1]),
+      this.ratePids[2].update(e_omega[2], dt, state.angularVelocity[2]),
     ]
 
     const disturbanceMomentBody = feedforwards?.disturbanceMomentBody
@@ -392,9 +404,12 @@ export class CascadedController {
     return {
       totalThrust,
       moments,
-      desiredForceNed: mode === 'full' ? F_c_ned : [0, 0, 0],
+      desiredForceNed: mode === 'full' || mode === 'velocity' ? F_c_ned : [0, 0, 0],
       desiredRotationMatrix: R_d,
       attitudeError: e_R,
+      desiredVelocity: v_c,
+      desiredAcceleration: a_c,
+      desiredAngularVelocity: omega_c,
     }
   }
 }

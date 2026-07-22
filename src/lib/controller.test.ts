@@ -85,7 +85,7 @@ describe('CascadedController', () => {
   })
 
   describe('velocity loop', () => {
-    it('combines P, I, D and feedforward acceleration terms', () => {
+    it('does not produce a derivative kick when the velocity setpoint steps', () => {
       const ctrl = makeController()
       const dt = 0.1
       ctrl.update(
@@ -109,13 +109,12 @@ describe('CascadedController', () => {
         dt
       )
       // Position loop output is 0 because position error is zero.
-      // a_c = a_ff + Kp^v * e_v + Ki^v * integral + Kd^v * de/dt
-      // e_v = 1, integral = 1*dt, de/dt = (1-0)/dt = 10
+      // Derivative is taken from the measured velocity, which did not change.
+      // Therefore a setpoint step contributes P + I + feedforward, but no D spike.
       const expectedAx =
         0.5 +
         gains.velocityKp[0] * 1 +
-        gains.velocityKi[0] * (1 * dt) +
-        gains.velocityKd[0] * 10
+        gains.velocityKi[0] * (1 * dt)
       expect(out.desiredForceNed[0]).toBeCloseTo(mass * expectedAx, 3)
     })
 
