@@ -1,17 +1,15 @@
-import { Cpu, FlaskConical, Settings2 } from 'lucide-react'
-
 interface LawCardProps {
-  icon: React.ReactNode
   title: string
   status: string
   href: string
+  variant: string
 }
 
-function LawCard({ icon, title, status, href }: LawCardProps) {
+function LawCard({ title, status, href, variant }: LawCardProps) {
   return (
-    <a href={href} style={cardStyle} className="ds-card apple-press">
-      <div style={iconWrapperStyle}>{icon}</div>
-      <div>
+    <a href={href} className={`control-law-card control-law-card--${variant} apple-press`}>
+      <div className="control-law-card__shade" />
+      <div className="control-law-card__content">
         <h2 style={cardTitleStyle}>{title}</h2>
         <p style={cardStatusStyle}>{status}</p>
       </div>
@@ -27,58 +25,39 @@ export default function ControlLawPage() {
         基于同一套无人机动力学，设计并对比不同控制律。
       </p>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }} className="ds-stagger">
+      <section className="control-law-grid ds-stagger">
         <LawCard
-          icon={<Settings2 size={28} color="var(--accent-primary)" />}
           title="PID 控制律"
           status="可无极调参"
           href="#/control-law/pid"
+          variant="pid"
         />
         <LawCard
-          icon={<FlaskConical size={28} color="var(--text-secondary)" />}
           title="LQR 控制律"
           status="开发中"
           href="#/control-law/lqr"
+          variant="lqr"
         />
         <LawCard
-          icon={<Cpu size={28} color="var(--text-secondary)" />}
           title="MPC 控制律"
           status="开发中"
           href="#/control-law/mpc"
+          variant="mpc"
         />
       </section>
     </div>
   )
 }
 
-const cardStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 16,
-  padding: 20,
-  textDecoration: 'none',
-}
-
-const iconWrapperStyle: React.CSSProperties = {
-  width: 48,
-  height: 48,
-  borderRadius: 10,
-  background: 'var(--accent-subtle)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-}
-
 const cardTitleStyle: React.CSSProperties = {
   fontFamily: 'var(--font-display)',
   fontSize: 18,
   fontWeight: 700,
-  color: 'var(--text-primary)',
+  color: '#ffffff',
   marginBottom: 4,
 }
 
 const cardStatusStyle: React.CSSProperties = {
   fontSize: 13,
-  color: 'var(--text-secondary)',
+  color: 'rgba(255, 255, 255, 0.82)',
 }

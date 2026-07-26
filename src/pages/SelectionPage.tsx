@@ -1,9 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import { estimateEndurance } from '@/lib/selectionEngine'
 import { getBatteryCells, getESCs, getFrames, getMotors, getPropellers } from '@/lib/database'
 import type { DroneConfig } from '@/store/configStore'
-import { AlertTriangle, Gauge, Scale, Timer, Zap } from 'lucide-react'
+import SelectionDroneModel from '@/components/SelectionDroneModel'
+import FlightResultVisual from '@/components/FlightResultVisual'
+import SelectionStarfield from '@/components/SelectionStarfield'
+
+type PartKey = 'frame' | 'motor' | 'propeller' | 'esc' | 'battery'
+type Estimate = ReturnType<typeof estimateEndurance>
 
 interface SelectFieldProps {
   label: string
@@ -14,303 +19,148 @@ interface SelectFieldProps {
 
 function SelectField({ label, value, options, onChange }: SelectFieldProps) {
   return (
-    <label style={fieldStyle}>
-      <span style={labelStyle}>{label}</span>
-      <select className="ds-select" value={value} onChange={e => onChange(e.target.value)}>
-        {options.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
+    <label className="selection-field">
+      <span>{label}</span>
+      <select className="ds-select" value={value} onChange={event => onChange(event.target.value)}>
+        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>
   )
 }
 
-interface NumberFieldProps {
+function NumberField({ label, value, min, max, step, suffix, onChange }: {
   label: string
   value: number
-  min?: number
-  max?: number
-  step?: number
-  suffix?: string
+  min: number
+  max: number
+  step: number
+  suffix: string
   onChange: (value: number) => void
-}
-
-function NumberField({ label, value, min, max, step, suffix, onChange }: NumberFieldProps) {
+}) {
   return (
-    <label style={fieldStyle}>
-      <span style={labelStyle}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input
-          type="number"
-          className="ds-input"
-          value={value}
-          min={min}
-          max={max}
-          step={step}
-          onChange={e => onChange(Number(e.target.value))}
-        />
-        {suffix && <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{suffix}</span>}
+    <label className="selection-field">
+      <span>{label}</span>
+      <div className="selection-number-input">
+        <input className="ds-input" type="number" value={value} min={min} max={max} step={step} onChange={event => onChange(Number(event.target.value))} />
+        <small>{suffix}</small>
       </div>
     </label>
   )
 }
 
-function ResultCard({
-  title,
-  icon,
-  result,
-  accent,
-}: {
-  title: string
-  icon: React.ReactNode
-  result: ReturnType<typeof estimateEndurance>['hover']
-  accent: string
-}) {
-  return (
-    <div className="ds-card" style={{ ...cardStyle, borderTop: `4px solid ${accent}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        {icon}
-        <h2 className="ds-title" style={{ fontSize: 16, margin: 0 }}>{title}</h2>
-      </div>
-      <div style={bigMetricStyle}>
-        <span style={bigMetricValueStyle}>{result.enduranceMin.toFixed(1)}</span>
-        <span style={bigMetricUnitStyle}>min</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
-        <MetricItem icon={<Zap size={16} />} label="电流" value={`${result.currentA.toFixed(1)} A`} />
-        <MetricItem icon={<Gauge size={16} />} label="功率" value={`${result.powerW.toFixed(0)} W`} />
-        <MetricItem icon={<Scale size={16} />} label="推力余量" value={`${(result.thrustMargin * 100).toFixed(0)}%`} />
-        <MetricItem icon={<Gauge size={16} />} label="油门" value={`${result.throttlePercent.toFixed(1)}%`} />
-      </div>
-      {'pitchAngleDeg' in result && result.pitchAngleDeg !== undefined && (
-        <MetricItem icon={<Gauge size={16} />} label="前倾角" value={`${result.pitchAngleDeg.toFixed(1)}°`} />
-      )}
-    </div>
-  )
-}
-
-function MetricItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ color: 'var(--text-secondary)', display: 'flex' }}>{icon}</span>
-      <div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{value}</div>
-      </div>
-    </div>
-  )
-}
-
 const presets: { label: string; config: Partial<DroneConfig> }[] = [
-  {
-    label: 'F450 标准版',
-    config: {
-      frameId: 'f450',
-      motorId: '2212-920',
-      escId: 'esc-30a',
-      propellerId: '9450',
-      batteryCellId: 'lipo-3.7',
-      batteryCells: 4,
-      batteryCapacity: 5000,
-      totalWeight: 1.5,
-    },
-  },
-  {
-    label: 'F450 增强版',
-    config: {
-      frameId: 'f450',
-      motorId: '2212-1000',
-      escId: 'esc-40a',
-      propellerId: '1045',
-      batteryCellId: 'lipo-3.7',
-      batteryCells: 4,
-      batteryCapacity: 5000,
-      totalWeight: 1.6,
-    },
-  },
+  { label: 'F450 标准版', config: { frameId: 'f450', motorId: '2212-920', escId: 'esc-30a', propellerId: '9450', batteryCellId: 'lipo-3.7', batteryCells: 4, batteryCapacity: 5000, totalWeight: 1.5 } },
+  { label: 'F450 增强版', config: { frameId: 'f450', motorId: '2212-1000', escId: 'esc-40a', propellerId: '1045', batteryCellId: 'lipo-3.7', batteryCells: 4, batteryCapacity: 5000, totalWeight: 1.6 } },
+]
+
+const partLabels: { key: PartKey; name: string; hint: string }[] = [
+  { key: 'propeller', name: '螺旋桨', hint: '尺寸与桨距' },
+  { key: 'motor', name: '电机', hint: 'KV 与推力' },
+  { key: 'frame', name: '机架', hint: '轴距与结构' },
+  { key: 'battery', name: '电池', hint: '电压与容量' },
+  { key: 'esc', name: '电调', hint: '持续电流' },
 ]
 
 export default function SelectionPage() {
   const { config, setConfig } = useConfigStore()
+  const [activePart, setActivePart] = useState<PartKey>('frame')
+  const [calculated, setCalculated] = useState<Estimate | null>(null)
+  const [activePreset, setActivePreset] = useState<string | null>(null)
 
-  const result = useMemo(() => estimateEndurance(config), [config])
+  const frames = useMemo(() => getFrames().map(item => ({ value: item.id, label: `${item.name} (${item.mass * 1000}g)` })), [])
+  const motors = useMemo(() => getMotors().map(item => ({ value: item.id, label: `${item.name} (${item.kv}KV)` })), [])
+  const propellers = useMemo(() => getPropellers().map(item => ({ value: item.id, label: item.name })), [])
+  const escs = useMemo(() => getESCs().map(item => ({ value: item.id, label: `${item.name} (${item.maxCurrent}A)` })), [])
+  const cells = useMemo(() => getBatteryCells().map(item => ({ value: item.id, label: item.name })), [])
+  const update = (partial: Partial<DroneConfig>) => { setConfig(partial); setCalculated(null); setActivePreset(null) }
 
-  const frames = useMemo(() => getFrames().map(f => ({ value: f.id, label: `${f.name} (${f.mass * 1000}g)` })), [])
-  const motors = useMemo(() => getMotors().map(m => ({ value: m.id, label: `${m.name} (${m.kv}KV)` })), [])
-  const props = useMemo(() => getPropellers().map(p => ({ value: p.id, label: p.name })), [])
-  const escs = useMemo(() => getESCs().map(e => ({ value: e.id, label: `${e.name} (${e.maxCurrent}A)` })), [])
-  const cells = useMemo(() => getBatteryCells().map(c => ({ value: c.id, label: c.name })), [])
-
-  const update = (partial: Partial<DroneConfig>) => setConfig(partial)
+  const configPanel = {
+    frame: <SelectField label="机架规格" value={config.frameId} options={[{ value: '', label: '请选择机架' }, ...frames]} onChange={value => update({ frameId: value })} />,
+    motor: <SelectField label="电机规格（四只）" value={config.motorId} options={[{ value: '', label: '请选择电机' }, ...motors]} onChange={value => update({ motorId: value })} />,
+    propeller: <SelectField label="螺旋桨规格（四副）" value={config.propellerId} options={[{ value: '', label: '请选择螺旋桨' }, ...propellers]} onChange={value => update({ propellerId: value })} />,
+    esc: <SelectField label="电调规格（四只）" value={config.escId} options={[{ value: '', label: '请选择电调' }, ...escs]} onChange={value => update({ escId: value })} />,
+    battery: <div className="selection-battery-fields">
+      <SelectField label="电芯类型" value={config.batteryCellId} options={[{ value: '', label: '请选择电芯' }, ...cells]} onChange={value => update({ batteryCellId: value })} />
+      <NumberField label="串联节数" value={config.batteryCells} min={1} max={12} step={1} suffix="S" onChange={value => update({ batteryCells: value })} />
+      <NumberField label="电池容量" value={config.batteryCapacity} min={100} max={50000} step={100} suffix="mAh" onChange={value => update({ batteryCapacity: value })} />
+    </div>,
+  }
 
   return (
-    <div className="page-container">
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 24 }}>
+    <div className="selection-page">
+      <SelectionStarfield />
+      <header className="selection-heading">
         <div>
-          <h1 className="ds-display" style={{ fontSize: 32, marginBottom: 8 }}>选型模式</h1>
-          <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>
-            选择部件并快速估算悬停与 15 m/s 高速前飞工况下的续航。
-          </p>
+          <p className="selection-eyebrow">QUADCOPTER CONFIGURATOR</p>
+          <h1 className="ds-display">四旋翼无人机选型</h1>
+          <p>点击模型上的部件，逐项完成配置，再计算悬停与高速前飞续航。</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {presets.map(p => (
-            <button
-              key={p.label}
-              onClick={() => setConfig(p.config)}
-              className="ds-button secondary"
-            >
-              {p.label}
+        <div className="selection-presets">
+          {presets.map(preset => <button key={preset.label} className={`ds-button secondary ${activePreset === preset.label ? 'active' : ''}`} aria-pressed={activePreset === preset.label} onClick={() => { setConfig(preset.config); setCalculated(null); setActivePreset(preset.label) }}>{preset.label}</button>)}
+        </div>
+      </header>
+
+      <section className="selection-workspace ds-fade-in">
+        <div className="selection-model-stage">
+          <SelectionDroneModel activePart={activePart} onSelect={setActivePart} />
+          {partLabels.map(part => (
+            <button key={part.key} className={`selection-part selection-part--${part.key} ${activePart === part.key ? 'active' : ''}`} onClick={() => setActivePart(part.key)}>
+              <strong>{part.name}</strong><span>{part.hint}</span>
             </button>
           ))}
         </div>
+        <aside className="selection-config-panel">
+          <div className="selection-config-index">{String(partLabels.findIndex(part => part.key === activePart) + 1).padStart(2, '0')} / 05</div>
+          <h2>{partLabels.find(part => part.key === activePart)?.name}配置</h2>
+          <p>当前选中的部件已抬升并高亮。选择参数后可继续点击模型上的其他部件。</p>
+          {configPanel[activePart]}
+          <NumberField label="整机起飞总重" value={config.totalWeight} min={0.1} max={50} step={0.1} suffix="kg" onChange={value => update({ totalWeight: value })} />
+          <div className="selection-part-tabs">
+            {partLabels.map(part => <button key={part.key} className={activePart === part.key ? 'active' : ''} onClick={() => setActivePart(part.key)}>{part.name}</button>)}
+          </div>
+        </aside>
+      </section>
+
+      <div className="selection-calculate">
+        <p>计算模型按 4 个旋翼、SOC 20% 截止及标准空气密度估算。</p>
+        <button className="ds-button selection-calculate-button" onClick={() => setCalculated(estimateEndurance(config))}>开始计算</button>
       </div>
 
-      <section className="section-card ds-fade-in">
-        <h3 className="ds-title" style={{ fontSize: 18, marginBottom: 16 }}>部件配置</h3>
-        <div style={formGridStyle}>
-          <SelectField
-            label="机架"
-            value={config.frameId}
-            options={[{ value: '', label: '请选择机架' }, ...frames]}
-            onChange={v => update({ frameId: v })}
-          />
-          <SelectField
-            label="电机"
-            value={config.motorId}
-            options={[{ value: '', label: '请选择电机' }, ...motors]}
-            onChange={v => update({ motorId: v })}
-          />
-          <SelectField
-            label="螺旋桨"
-            value={config.propellerId}
-            options={[{ value: '', label: '请选择螺旋桨' }, ...props]}
-            onChange={v => update({ propellerId: v })}
-          />
-          <SelectField
-            label="电调"
-            value={config.escId}
-            options={[{ value: '', label: '请选择电调' }, ...escs]}
-            onChange={v => update({ escId: v })}
-          />
-          <SelectField
-            label="电芯类型"
-            value={config.batteryCellId}
-            options={[{ value: '', label: '请选择电芯' }, ...cells]}
-            onChange={v => update({ batteryCellId: v })}
-          />
-          <NumberField
-            label="串联节数"
-            value={config.batteryCells}
-            min={1}
-            max={12}
-            step={1}
-            suffix="S"
-            onChange={v => update({ batteryCells: v })}
-          />
-          <NumberField
-            label="电池容量"
-            value={config.batteryCapacity}
-            min={100}
-            max={50000}
-            step={100}
-            suffix="mAh"
-            onChange={v => update({ batteryCapacity: v })}
-          />
-          <NumberField
-            label="起飞总重"
-            value={config.totalWeight}
-            min={0.1}
-            max={50}
-            step={0.1}
-            suffix="kg"
-            onChange={v => update({ totalWeight: v })}
-          />
+      {calculated && (
+        <div className="selection-results ds-fade-in">
+          {calculated.warnings.length > 0 && <section className="selection-warnings">
+            <h2>配置警告</h2>
+            {calculated.warnings.map((warning, index) => <p key={index}>{warning.message}</p>)}
+          </section>}
+          <section>
+            <div className="selection-results-heading"><span>ENDURANCE ESTIMATE</span><h2>续航估计</h2></div>
+            <ResultCard title="悬停（低功率）" subtitle="稳定悬停工况" result={calculated.hover} mode="hover" imageSide="right" />
+            <ResultCard title="15 m/s 高速前飞（高功率）" subtitle="定速前飞工况" result={calculated.highSpeed} mode="forward" imageSide="left" />
+          </section>
         </div>
-      </section>
-
-      {result.warnings.length > 0 && (
-        <section style={{ marginBottom: 24, marginTop: 24 }}>
-          {result.warnings.map((w, i) => (
-            <div key={i} style={warningStyle}>
-              <AlertTriangle size={18} color="var(--status-danger)" />
-              <span style={{ fontSize: 14, color: 'var(--status-danger)' }}>{w.message}</span>
-            </div>
-          ))}
-        </section>
       )}
-
-      <section className="ds-fade-in" style={{ marginTop: 24 }}>
-        <h3 className="ds-title" style={{ fontSize: 18, marginBottom: 16 }}>续航估算</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }} className="ds-stagger">
-          <ResultCard
-            title="悬停（低功率）"
-            icon={<Timer size={24} color="var(--status-success)" />}
-            result={result.hover}
-            accent="var(--status-success)"
-          />
-          <ResultCard
-            title="15 m/s 高速前飞（高功率）"
-            icon={<Zap size={24} color="var(--status-warning)" />}
-            result={result.highSpeed}
-            accent="var(--status-warning)"
-          />
-        </div>
-      </section>
     </div>
   )
 }
 
-const fieldStyle: React.CSSProperties = {
-  display: 'block',
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--text-secondary)',
-  marginBottom: 6,
-}
-
-const formGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: 16,
-}
-
-const cardStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  padding: 24,
-}
-
-const bigMetricStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: 8,
-}
-
-const bigMetricValueStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-display)',
-  fontSize: 48,
-  fontWeight: 800,
-  letterSpacing: '-0.03em',
-  color: 'var(--text-primary)',
-  lineHeight: 1,
-}
-
-const bigMetricUnitStyle: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 600,
-  color: 'var(--text-secondary)',
-}
-
-const warningStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  padding: '12px 16px',
-  background: 'var(--status-danger-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  marginBottom: 10,
+function ResultCard({ title, subtitle, result, mode, imageSide }: {
+  title: string
+  subtitle: string
+  result: Estimate['hover']
+  mode: 'hover' | 'forward'
+  imageSide: 'left' | 'right'
+}) {
+  const data = <div className="selection-result-data">
+    <p>{subtitle}</p><h3>{title}</h3>
+    <div className="selection-endurance"><strong>{result.enduranceMin.toFixed(1)}</strong><span>分钟</span></div>
+    <dl>
+      <div><dt>总电流</dt><dd>{result.currentA.toFixed(1)} A</dd></div>
+      <div><dt>输入功率</dt><dd>{result.powerW.toFixed(0)} W</dd></div>
+      <div><dt>推力余量</dt><dd>{(result.thrustMargin * 100).toFixed(0)}%</dd></div>
+      <div><dt>油门开度</dt><dd>{result.throttlePercent.toFixed(1)}%</dd></div>
+      {result.pitchAngleDeg !== undefined && <div><dt>机体前倾角</dt><dd>{result.pitchAngleDeg.toFixed(1)}°</dd></div>}
+    </dl>
+  </div>
+  const visual = <div className="selection-result-visual"><FlightResultVisual mode={mode} /></div>
+  return <article className="selection-result-card">{imageSide === 'left' ? visual : data}{imageSide === 'left' ? data : visual}</article>
 }

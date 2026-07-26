@@ -76,8 +76,8 @@ export default function TheoryPage() {
   }
 
   return (
-    <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+    <div className="theory-page">
+      <div className="theory-layout">
         {showLeftRail && (
           <aside className="theory-sidebar" style={leftRailStyle}>
             <LineSidebar
