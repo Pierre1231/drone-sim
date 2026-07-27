@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { AppRoute } from '@/lib/routing'
 
 interface SiteHeaderProps {
@@ -12,10 +13,19 @@ const links: { label: string; href: string; route: AppRoute }[] = [
 ]
 
 export default function SiteHeader({ currentRoute }: SiteHeaderProps) {
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 20)
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    return () => window.removeEventListener('scroll', update)
+  }, [])
+
   return (
-    <header style={headerStyle} className="ds-nav-material">
+    <header style={headerStyle} className={`site-header ${scrolled ? 'site-header--scrolled' : ''}`}>
       <a href="#/" style={brandStyle} className="apple-press">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#d9f8ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 2L2 7l10 5 10-5-10-5z" />
           <path d="M2 17l10 5 10-5" />
           <path d="M2 12l10 5 10-5" />
@@ -65,12 +75,12 @@ const brandTextStyle: React.CSSProperties = {
   fontFamily: 'var(--font-display)',
   fontSize: 15,
   fontWeight: 700,
-  color: 'var(--text-primary)',
+  color: '#ffffff',
 }
 
 const navLinkStyle: React.CSSProperties = {
   padding: '8px 14px',
-  color: 'var(--text-secondary)',
+  color: 'rgba(255, 255, 255, .76)',
   textDecoration: 'none',
   fontSize: 13,
   fontWeight: 600,
@@ -78,6 +88,6 @@ const navLinkStyle: React.CSSProperties = {
 }
 
 const activeNavLinkStyle: React.CSSProperties = {
-  color: 'var(--accent-primary)',
-  background: 'var(--accent-subtle)',
+  color: '#07111d',
+  background: '#d9f8ff',
 }

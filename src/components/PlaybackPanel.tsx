@@ -197,7 +197,7 @@ function DroneModel({ position, quaternion, motorSpeeds, onClick }: {
   )
 }
 
-const TrajectoryLine = memo(function TrajectoryLine({ positions, color = '#3b82f6' }: { positions: number[][]; color?: string }) {
+const TrajectoryLine = memo(function TrajectoryLine({ positions, color = '#d9f8ff' }: { positions: number[][]; color?: string }) {
   const positionArray = useMemo(() => buildTrajectoryPositions(positions, 1000), [positions])
   if (positions.length < 2) return null
 
@@ -264,11 +264,11 @@ const AstarSceneOverlay = memo(function AstarSceneOverlay({ scene }: { scene?: P
         <group position={[scene.goal[0], 0.08, scene.goal[1]]}>
           <mesh>
             <cylinderGeometry args={[0.38, 0.38, 0.12, 32]} />
-            <meshStandardMaterial color="#2563eb" transparent opacity={0.82} />
+            <meshStandardMaterial color="#d9f8ff" transparent opacity={0.82} />
           </mesh>
           <mesh position={[0, 0.58, 0]}>
             <coneGeometry args={[0.24, 0.56, 32]} />
-            <meshStandardMaterial color="#1d4ed8" />
+            <meshStandardMaterial color="#8ee7ff" />
           </mesh>
         </group>
       )}
@@ -555,8 +555,8 @@ export default function PlaybackPanel({ scene }: { scene?: PlaybackSceneOverlay 
         {followMode && (
           <div style={{
             position: 'absolute', top: 16, right: 16,
-            background: 'rgba(59, 130, 246, 0.9)', borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-2) var(--space-4)', color: 'white',
+            background: 'rgba(217, 248, 255, .92)', borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-2) var(--space-4)', color: '#07111d',
             fontSize: 13, fontWeight: 600, pointerEvents: 'none',
           }}>
             跟随视角模式 | 滚轮缩放 | 左键旋转 | ESC 退出
@@ -568,13 +568,13 @@ export default function PlaybackPanel({ scene }: { scene?: PlaybackSceneOverlay 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap',
         padding: 'var(--space-4) var(--space-6)',
-        background: '#ffffff',
-        borderTop: '1px solid var(--border-default)',
+        background: '#0f172a',
+        borderTop: '1px solid #1f2937',
       }}
       >
         <button onClick={() => { setPlaybackTime(0); setIsPlaying(false) }} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent', color: 'var(--text-primary)', border: 'none', borderRadius: '50%',
+          background: 'transparent', color: '#f8fafc', border: 'none', borderRadius: '50%',
           cursor: 'pointer', transition: 'all 0.15s ease',
         }}
           onMouseEnter={e => e.currentTarget.style.background = 'oklch(92% 0.01 250)'}
@@ -585,19 +585,19 @@ export default function PlaybackPanel({ scene }: { scene?: PlaybackSceneOverlay 
 
         <button onClick={() => setIsPlaying(!isPlaying)} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'var(--accent-primary)', color: 'var(--text-inverse)',
+          background: isPlaying ? '#d9f8ff' : '#9ca3af', color: '#111827',
           border: 'none', borderRadius: '50%', cursor: 'pointer',
           transition: 'all 0.15s ease',
         }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-hover)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-primary)'}
+          onMouseEnter={e => e.currentTarget.style.background = isPlaying ? '#d9f8ff' : '#d1d5db'}
+          onMouseLeave={e => e.currentTarget.style.background = isPlaying ? '#d9f8ff' : '#9ca3af'}
         >
           {isPlaying ? <Pause size={20} /> : <Play size={20} />}
         </button>
 
         <button onClick={() => { setPlaybackTime(totalTime); setIsPlaying(false) }} style={{
           width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent', color: 'var(--text-primary)', border: 'none', borderRadius: '50%',
+          background: 'transparent', color: '#f8fafc', border: 'none', borderRadius: '50%',
           cursor: 'pointer', transition: 'all 0.15s ease',
         }}
           onMouseEnter={e => e.currentTarget.style.background = 'oklch(92% 0.01 250)'}
@@ -607,18 +607,24 @@ export default function PlaybackPanel({ scene }: { scene?: PlaybackSceneOverlay 
         </button>
 
         <input
+          className="playback-slider"
           type="range"
           min={0}
           max={totalTime}
           step={Math.max(totalTime / 1000, 0.01)}
           value={playbackTime}
           onChange={e => { setPlaybackTime(Number(e.target.value)); setIsPlaying(false) }}
-          style={{ flex: '1 1 220px', minWidth: 180, margin: '0 var(--space-2)', accentColor: 'var(--accent-primary)' }}
+          style={{
+            flex: '1 1 220px',
+            minWidth: 180,
+            margin: '0 var(--space-2)',
+            background: `linear-gradient(to right, #d9f8ff 0%, #d9f8ff ${totalTime > 0 ? playbackTime / totalTime * 100 : 0}%, #6b7280 ${totalTime > 0 ? playbackTime / totalTime * 100 : 0}%, #6b7280 100%)`,
+          }}
         />
 
         <span style={{
           fontFamily: 'var(--font-mono)', fontSize: 13,
-          color: 'var(--text-secondary)', whiteSpace: 'nowrap',
+          color: '#cbd5e1', whiteSpace: 'nowrap',
         }}>
           {formatTime(timeSec)} / {formatTime(totalTime)}
         </span>
@@ -626,16 +632,16 @@ export default function PlaybackPanel({ scene }: { scene?: PlaybackSceneOverlay 
         <div style={{ display: 'flex', gap: 'var(--space-1)', flexWrap: 'wrap' }}>
           {[0.5, 1, 2, 4].map(speed => (
             <button key={speed} onClick={() => setPlaybackSpeed(speed)} style={{
-              padding: 'var(--space-2) var(--space-3)', background: 'transparent',
-              border: '1px solid var(--border-default)',
-              color: playbackSpeed === speed ? 'var(--text-inverse)' : 'var(--text-secondary)',
+              padding: 'var(--space-2) var(--space-3)', background: playbackSpeed === speed ? '#d9f8ff' : '#9ca3af',
+              border: '1px solid #9ca3af',
+              color: '#111827',
               fontSize: 12, fontWeight: 500, borderRadius: 'var(--radius-sm)',
               cursor: 'pointer', transition: 'all 0.15s ease', fontFamily: 'var(--font-body)',
-              backgroundColor: playbackSpeed === speed ? 'var(--accent-primary)' : 'transparent',
-              borderColor: playbackSpeed === speed ? 'var(--accent-primary)' : 'var(--border-default)',
+              backgroundColor: playbackSpeed === speed ? '#d9f8ff' : '#9ca3af',
+              borderColor: playbackSpeed === speed ? '#d9f8ff' : '#9ca3af',
             }}
-              onMouseEnter={e => { if (playbackSpeed !== speed) { e.currentTarget.style.borderColor = 'oklch(70% 0.01 250)'; e.currentTarget.style.color = 'var(--text-primary)' }}}
-              onMouseLeave={e => { if (playbackSpeed !== speed) { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-secondary)' }}}
+              onMouseEnter={e => { e.currentTarget.style.background = playbackSpeed === speed ? '#d9f8ff' : '#d1d5db' }}
+              onMouseLeave={e => { e.currentTarget.style.background = playbackSpeed === speed ? '#d9f8ff' : '#9ca3af' }}
             >
               {speed}x
             </button>

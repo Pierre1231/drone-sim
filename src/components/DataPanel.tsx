@@ -140,7 +140,7 @@ export default function DataPanel() {
         <section>
           <h3 style={headingStyle}>时间曲线</h3>
           <div style={chartGridStyle}>
-            <ChartCard title="电压" option={makeChartOption(result.time, result.voltage, 'V', '#3b82f6')} />
+            <ChartCard title="电压" option={makeChartOption(result.time, result.voltage, 'V', '#d9f8ff')} />
             <ChartCard title="电流" option={makeChartOption(result.time, result.current, 'A', '#14b8a6')} />
             <ChartCard title="功率" option={makeChartOption(result.time, result.power, 'W', '#f97316')} />
             <ChartCard title="高度" option={makeChartOption(result.time, result.position.map(p => -p[2]), 'm', '#22c55e')} />

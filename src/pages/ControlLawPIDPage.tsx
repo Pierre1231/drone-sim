@@ -8,13 +8,12 @@ import { getPresetById } from '@/lib/presets'
 import { quatToEuler } from '@/lib/dynamics'
 import type { ControllerGains } from '@/lib/controller'
 import type { SimResult } from '@/lib/simulation'
-import { Link2, Link2Off, Rotate3D, Gauge, Move, Activity } from 'lucide-react'
+import { Link2, Link2Off } from 'lucide-react'
 
 const LOOP_META: Record<
   LoopTab,
   {
     label: string
-    icon: React.ReactNode
     gains: { key: keyof ControllerGains; label: string; max: number }[]
     axisLabels: [string, string, string]
     outputLabel: string
@@ -23,7 +22,6 @@ const LOOP_META: Record<
 > = {
   position: {
     label: '位置环',
-    icon: <Move size={18} />,
     gains: [
       { key: 'positionKp', label: 'Kp', max: 5 },
       { key: 'positionKi', label: 'Ki', max: 0.5 },
@@ -34,7 +32,6 @@ const LOOP_META: Record<
   },
   velocity: {
     label: '速度环',
-    icon: <Activity size={18} />,
     gains: [
       { key: 'velocityKp', label: 'Kp', max: 5 },
       { key: 'velocityKi', label: 'Ki', max: 0.5 },
@@ -46,7 +43,6 @@ const LOOP_META: Record<
   },
   attitude: {
     label: '姿态环',
-    icon: <Rotate3D size={18} />,
     gains: [
       { key: 'attitudeKp', label: 'Kp', max: 10 },
     ],
@@ -56,7 +52,6 @@ const LOOP_META: Record<
   },
   rate: {
     label: '角速度环',
-    icon: <Gauge size={18} />,
     gains: [
       { key: 'rateKp', label: 'Kp', max: 1 },
       { key: 'rateKi', label: 'Ki', max: 0.2 },
@@ -140,7 +135,7 @@ function buildChartOption(
   tab: LoopTab,
   axisLabels: [string, string, string]
 ): EChartsOption {
-  const colors = ['var(--status-danger)', 'var(--status-warning)', 'var(--accent-primary)']
+  const colors = ['#ff9ed2', '#fbbf24', '#8ee7ff']
   const series = axisLabels.map((label, i) => ({
     name: label,
     type: 'line' as const,
@@ -153,9 +148,9 @@ function buildChartOption(
   return {
     grid: { left: 48, right: 16, top: 32, bottom: 32 },
     tooltip: { trigger: 'axis' },
-    legend: { data: axisLabels, top: 0 },
-    xAxis: { type: 'value', name: '时间 (s)', min: 0, max: Math.max(5, time[time.length - 1] ?? 5) },
-    yAxis: { type: 'value', name: `${LOOP_META[tab].outputLabel} (${LOOP_META[tab].outputUnit})` },
+    legend: { data: axisLabels, top: 0, textStyle: { color: '#f8fafc' } },
+    xAxis: { type: 'value', name: '时间 (s)', min: 0, max: Math.max(5, time[time.length - 1] ?? 5), nameTextStyle: { color: '#e5e7eb' }, axisLabel: { color: '#e5e7eb' }, axisLine: { lineStyle: { color: '#94a3b8' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,.1)' } } },
+    yAxis: { type: 'value', name: `${LOOP_META[tab].outputLabel} (${LOOP_META[tab].outputUnit})`, nameTextStyle: { color: '#e5e7eb' }, axisLabel: { color: '#e5e7eb' }, axisLine: { lineStyle: { color: '#94a3b8' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,.1)' } } },
     series,
   }
 }
@@ -164,13 +159,13 @@ function buildControlOption(time: number[], control: number[]): EChartsOption {
   return {
     grid: { left: 48, right: 16, top: 24, bottom: 32 },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'value', name: '时间 (s)', min: 0, max: Math.max(5, time[time.length - 1] ?? 5) },
-    yAxis: { type: 'value', name: '总推力 (N)' },
+    xAxis: { type: 'value', name: '时间 (s)', min: 0, max: Math.max(5, time[time.length - 1] ?? 5), nameTextStyle: { color: '#e5e7eb' }, axisLabel: { color: '#e5e7eb' }, axisLine: { lineStyle: { color: '#94a3b8' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,.1)' } } },
+    yAxis: { type: 'value', name: '总推力 (N)', nameTextStyle: { color: '#e5e7eb' }, axisLabel: { color: '#e5e7eb' }, axisLine: { lineStyle: { color: '#94a3b8' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,.1)' } } },
     series: [{
       type: 'line',
       showSymbol: false,
       data: control.map((v, i) => [time[i], v]),
-      lineStyle: { color: 'var(--status-warning)', width: 2 },
+      lineStyle: { color: '#ffffff', width: 2 },
     }],
   }
 }
@@ -211,31 +206,28 @@ export default function ControlLawPIDPage() {
   }, [chartData])
 
   return (
-    <div className="page-container">
+    <div className="page-container space-content-page pid-page">
       <div style={{ marginBottom: 24 }}>
-        <h1 className="ds-display" style={{ fontSize: 32, marginBottom: 8 }}>PID 控制律</h1>
+        <h1 className="ds-display app-page-title">PID 控制律</h1>
         <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>
           调整串级 PID 增益，实时观察阶跃响应与控制量变化。
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div className="pid-loop-tabs" style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         {(Object.keys(LOOP_META) as LoopTab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveLoopTab(tab)}
             className={`ds-tab ${tab === activeLoopTab ? 'active' : ''}`}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {LOOP_META[tab].icon}
-              {LOOP_META[tab].label}
-            </span>
+            <span>{LOOP_META[tab].label}</span>
           </button>
         ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24, alignItems: 'start' }}>
-        <section className="section-card ds-fade-in">
+        <section className="section-card pid-panel ds-fade-in">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <h3 className="ds-title" style={{ fontSize: 16, margin: 0 }}>{meta.label}参数</h3>
             <button
@@ -264,10 +256,10 @@ export default function ControlLawPIDPage() {
           {meta.gains.map(g => {
             const value = pidGains[g.key][activeAxis]
             return (
-              <div key={g.key} style={{ marginBottom: 16 }}>
+              <div key={g.key} className="pid-gain-row" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{g.label}</span>
-                  <span className="ds-mono" style={{ fontSize: 13, color: 'var(--accent-primary)', fontWeight: 700, padding: '4px 8px', background: 'var(--accent-subtle)', borderRadius: 'var(--radius-md)' }}>{value.toFixed(4)}</span>
+                  <span className="pid-gain-label" style={{ fontSize: 14, fontWeight: 700 }}>{g.label}</span>
+                  <span className="ds-mono" style={{ fontSize: 13, color: '#d9f8ff', fontWeight: 700, padding: '4px 8px', background: 'rgba(217, 248, 255, .12)', borderRadius: 'var(--radius-md)' }}>{value.toFixed(4)}</span>
                 </div>
                 <input
                   type="range"
@@ -277,6 +269,7 @@ export default function ControlLawPIDPage() {
                   step={g.max / 200}
                   value={value}
                   onChange={e => setPidGain(g.key, activeAxis, Number(e.target.value))}
+                  style={{ background: `linear-gradient(to right, #d9f8ff 0%, #d9f8ff ${Math.min(100, Math.max(0, value / g.max * 100))}%, #6b7280 ${Math.min(100, Math.max(0, value / g.max * 100))}%, #6b7280 100%)` }}
                 />
               </div>
             )
@@ -284,7 +277,7 @@ export default function ControlLawPIDPage() {
         </section>
 
         <div className="ds-stagger">
-          <section className="section-card" style={{ marginBottom: 16 }}>
+          <section className="section-card pid-panel" style={{ marginBottom: 16 }}>
             <h3 className="ds-title" style={{ fontSize: 16, marginBottom: 12 }}>阶跃响应</h3>
             {result ? (
               <ReactECharts option={responseOption} style={{ height: 300 }} />
@@ -294,7 +287,7 @@ export default function ControlLawPIDPage() {
               </div>
             )}
           </section>
-          <section className="section-card">
+          <section className="section-card pid-panel">
             <h3 className="ds-title" style={{ fontSize: 16, marginBottom: 12 }}>控制量</h3>
             {result ? (
               <ReactECharts option={controlOption} style={{ height: 200 }} />

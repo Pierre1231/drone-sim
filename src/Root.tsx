@@ -9,6 +9,7 @@ import ControlLawPIDPage from './pages/ControlLawPIDPage'
 import ControlLawLQRPage from './pages/ControlLawLQRPage'
 import ControlLawMPCPage from './pages/ControlLawMPCPage'
 import TheoryPage from './theory/TheoryPage'
+import SelectionStarfield from './components/SelectionStarfield'
 
 function getControlLawSubPage(hash: string): 'overview' | 'pid' | 'lqr' | 'mpc' {
   if (hash.startsWith('#/control-law/pid')) return 'pid'
@@ -59,9 +60,10 @@ export default function Root() {
   }
 
   return (
-    <div style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
+    <div className={route === 'theory' ? 'app-root' : 'app-root app-root--space'}>
       <SiteHeader currentRoute={route} />
-      {renderPage()}
+      {route !== 'theory' && route !== 'selection' && <SelectionStarfield />}
+      <main className="app-page-layer">{renderPage()}</main>
     </div>
   )
 }

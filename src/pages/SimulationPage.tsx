@@ -1,21 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Activity,
-  BookOpen,
-  CheckCircle,
-  CircleDot,
-  Clock,
-  Code2,
-  Cpu,
-  Gauge,
-  Play,
-  RotateCcw,
-  Route,
-  Square,
-  Terminal,
-  Timer,
-  XCircle,
-} from 'lucide-react'
 import PlaybackPanel from '@/components/PlaybackPanel'
 import { useSimStore } from '@/store/simStore'
 import type { SimResult } from '@/lib/simulation'
@@ -23,6 +6,7 @@ import PythonControlWorker from '@/workers/pythonControl.worker?worker'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { oneDark } from '@codemirror/theme-one-dark'
+import RadarEvaluationVisual from '@/components/RadarEvaluationVisual'
 
 type DemoType = 'pid-hover' | 'circle' | 'astar' | 'blank'
 type WorkerMissionType = 'hover' | 'circle'
@@ -551,11 +535,11 @@ const DEMOS: DemoPreset[] = [
   { key: 'blank', label: '空白自定义', workerMissionType: 'hover', simTime: 8, code: BLANK_CODE },
 ]
 
-const DEMO_META: Record<DemoType, { icon: typeof Activity; meta: string }> = {
-  'pid-hover': { icon: Gauge, meta: '地面起飞到定点悬停' },
-  circle: { icon: CircleDot, meta: '先定高，再进入圆轨迹' },
-  astar: { icon: Route, meta: '网格避障路径跟踪' },
-  blank: { icon: Code2, meta: '保留控制器骨架' },
+const DEMO_META: Record<DemoType, { meta: string }> = {
+  'pid-hover': { meta: '地面起飞到定点悬停' },
+  circle: { meta: '先定高，再进入圆轨迹' },
+  astar: { meta: '网格避障路径跟踪' },
+  blank: { meta: '保留控制器骨架' },
 }
 
 const DEFAULT_DEMO = DEMOS[0]
@@ -810,21 +794,17 @@ export default function SimulationPage() {
     : undefined
 
   return (
-    <div className="page-container sim-workbench" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <section className="sim-topbar ds-fade-in">
+    <div className="page-container sim-workbench space-content-page" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <section className="sim-topbar">
         <div className="sim-titlebar">
-          <div className="sim-mark">
-            <Cpu size={21} />
-          </div>
           <div style={{ minWidth: 0 }}>
-            <h1 className="sim-heading">编程仿真</h1>
+            <h1 className="sim-heading ds-display app-page-title">编程仿真</h1>
             <p className="sim-subtitle">Python PID · 推力/力矩 · 动力学仿真</p>
           </div>
         </div>
 
         <div className="sim-topbar-modes" aria-label="任务模式">
           {DEMOS.map((demo) => {
-            const Icon = DEMO_META[demo.key].icon
             return (
               <button
                 key={demo.key}
@@ -834,7 +814,6 @@ export default function SimulationPage() {
                 disabled={status === 'running'}
                 title={`${demo.label} · ${DEMO_META[demo.key].meta}`}
               >
-                <Icon size={15} />
                 <span>{demo.label}</span>
               </button>
             )
@@ -843,11 +822,9 @@ export default function SimulationPage() {
 
         <div className="sim-actions">
           <span className={`sim-status-pill ${status}`}>
-            {status === 'complete' ? <CheckCircle size={15} /> : status === 'error' ? <XCircle size={15} /> : <Activity size={15} />}
             {formatStatus(status, pyodideLoading)}
           </span>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700 }}>
-            <Clock size={16} />
             <input
               type="number"
               className="ds-input"
@@ -862,17 +839,14 @@ export default function SimulationPage() {
             s
           </label>
           <button className="ds-button secondary" onClick={handleReset} disabled={status === 'running'} style={{ height: 38 }}>
-            <RotateCcw size={16} />
             重置
           </button>
           {status === 'running' ? (
             <button className="ds-button" onClick={handleStop} style={{ height: 38, background: 'var(--status-danger)' }}>
-              <Square size={16} />
               停止
             </button>
           ) : (
             <button className="ds-button" onClick={handleRun} disabled={!pyodideReady || pyodideLoading} style={{ height: 38 }}>
-              <Play size={16} />
               运行
             </button>
           )}
@@ -881,10 +855,10 @@ export default function SimulationPage() {
 
       <div className="sim-shell">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-          <section className="sim-panel ds-fade-in">
+          <section className="sim-panel sim-plain-section ds-fade-in">
             <div className="sim-panel-header">
               <div>
-                <h2 className="sim-panel-title"><BookOpen size={16} />Python 控制器</h2>
+                <h2 className="sim-panel-title">Python 控制器</h2>
                 <p className="sim-panel-subtitle">{activeDemo.label} · Controller.update(t, state)</p>
               </div>
               <span className="ds-chip info">NED</span>
@@ -910,10 +884,10 @@ export default function SimulationPage() {
           </section>
         </div>
 
-        <section className="sim-panel sim-viewer ds-fade-in">
+        <section className="sim-panel sim-viewer sim-plain-section ds-fade-in">
           <div className="sim-panel-header">
             <div>
-              <h2 className="sim-panel-title"><Activity size={16} />三维回放</h2>
+              <h2 className="sim-panel-title">三维回放</h2>
               <p className="sim-panel-subtitle">实际轨迹与参考轨迹</p>
             </div>
             <span className="ds-chip info">{resultDuration(result, simTime)}</span>
@@ -925,39 +899,49 @@ export default function SimulationPage() {
       </div>
 
       <div className="sim-bottom-grid">
-        <section className="sim-panel ds-fade-in">
+        <section className="sim-panel sim-background-section ds-fade-in">
           <div className="sim-panel-header">
-            <h2 className="sim-panel-title"><Terminal size={16} />运行日志</h2>
+            <h2 className="sim-panel-title">运行日志</h2>
           </div>
           <div className="sim-panel-body">
             <pre className="sim-log">{logs.length === 0 ? 'ready' : logs.join('\n')}</pre>
           </div>
         </section>
 
-        <section className="sim-panel ds-fade-in">
+        <section className="sim-panel sim-background-section ds-fade-in">
           <div className="sim-panel-header">
-            <h2 className="sim-panel-title">
-              {grade?.passed ? <CheckCircle size={16} color="var(--status-success)" /> : <XCircle size={16} color={grade ? 'var(--status-danger)' : 'var(--text-secondary)'} />}
-              任务评估
-            </h2>
+            <h2 className="sim-panel-title">任务评估</h2>
           </div>
           <div className="sim-panel-body">
-            <div className="sim-stat-grid">
+            <div className="sim-evaluation-layout">
+              <div className="sim-evaluation-constellation">
+                <RadarEvaluationVisual
+                  labels={['耗时', '高度', '精度', '评分']}
+                  values={[
+                    Math.max(.12, Math.min(1, simTime / Math.max(elapsedTime || simTime, 1))),
+                    result?.position.length ? Math.max(.12, Math.min(1, Math.abs(result.position[result.position.length - 1][2]) / 5)) : .12,
+                    grade ? Math.max(.12, 1 - Math.min(grade.averageError / 3, .88)) : .12,
+                    grade ? (grade.passed ? .92 : .38) : .12,
+                  ]}
+                />
+              </div>
+              <div className="sim-stat-grid">
               <div className="sim-stat">
-                <div className="sim-stat-label"><Timer size={13} />运行耗时</div>
+                <div className="sim-stat-label">运行耗时</div>
                 <div className="sim-stat-value">{status === 'running' ? `${elapsedTime.toFixed(1)}s` : resultDuration(result, simTime)}</div>
               </div>
               <div className="sim-stat">
-                <div className="sim-stat-label"><Gauge size={13} />最终高度</div>
+                <div className="sim-stat-label">最终高度</div>
                 <div className="sim-stat-value">{resultFinalAltitude(result)}</div>
               </div>
               <div className="sim-stat">
-                <div className="sim-stat-label"><Route size={13} />平均/最大误差</div>
+                <div className="sim-stat-label">平均/最大误差</div>
                 <div className="sim-stat-value">{grade ? `${grade.averageError.toFixed(2)} / ${grade.maxError.toFixed(2)} m` : '-'}</div>
               </div>
               <div className="sim-stat">
-                <div className="sim-stat-label"><CheckCircle size={13} />评分</div>
+                <div className="sim-stat-label">评分</div>
                 <div className="sim-stat-value">{gradeStatusText(grade)}</div>
+              </div>
               </div>
             </div>
           </div>

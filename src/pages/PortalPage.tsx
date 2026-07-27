@@ -1,7 +1,7 @@
 import { ArrowRight } from 'lucide-react'
 import LetterGlitch from '../components/LetterGlitch'
 
-const HERO_GLITCH_COLORS = ['#1d4ed8', '#3b82f6', '#9bc1ff', '#cee1ff']
+const HERO_GLITCH_COLORS = ['#d9f8ff', '#bcefff', '#8ee7ff', '#effcff']
 
 export default function PortalPage() {
   return (
@@ -12,7 +12,7 @@ export default function PortalPage() {
           glitchSpeed={50}
           smooth={true}
           mask="quadcopter"
-          backgroundColor="#ffffff"
+          backgroundColor="transparent"
           outerVignette={false}
         />
       </div>
@@ -26,7 +26,7 @@ export default function PortalPage() {
             让每一次设计迭代都有数据支撑。
           </p>
           <div style={heroActionsStyle}>
-            <a href="#/selection" className="ds-button" style={heroActionStyle}>
+            <a href="#/selection" className="ds-button portal-selection-button" style={heroActionStyle}>
               开始选型 <ArrowRight size={14} style={{ marginLeft: 6, flexShrink: 0 }} />
             </a>
             <a href="#/simulation" className="ds-button secondary" style={heroActionStyle}>
@@ -69,15 +69,15 @@ const heroTextStyle: React.CSSProperties = {
 }
 
 const heroTitleStyle: React.CSSProperties = {
-  fontSize: 'clamp(28px, 6vmin, 56px)',
-  color: 'var(--text-primary)',
+  fontSize: 'clamp(36px, 4vw, 54px)',
+  color: '#ffffff',
   marginBottom: 'clamp(10px, 1.8vmin, 20px)',
 }
 
 const heroBodyStyle: React.CSSProperties = {
   fontSize: 'clamp(14px, 2vmin, 17px)',
   lineHeight: 1.6,
-  color: 'rgba(15, 23, 42, 0.82)',
+  color: 'rgba(215, 231, 241, 0.78)',
   marginBottom: 'clamp(16px, 2.8vmin, 32px)',
 }
 
