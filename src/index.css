@@ -471,7 +471,7 @@ input[type="range"].ds-slider::-moz-range-thumb {
   --accent-soft: rgba(217, 248, 255, .32);
   --status-info: #d9f8ff;
   color: #f5fbff;
-  background: radial-gradient(ellipse 90% 180px at 50% 0, rgba(217, 248, 255, .32), rgba(54, 101, 130, .16) 42%, transparent 100%), linear-gradient(180deg, #101c2b 0, #080e18 220px, #050912 520px, #050912 100%);
+  background: #050912;
 }
 
 .app-root--space .ds-button:not(.secondary):not(.ghost) { color: #07111d; border-color: #d9f8ff; background: #d9f8ff; }
@@ -769,18 +769,18 @@ article .tex-block + h3.theory-heading {
 .selection-part--battery { top: 35%; left: 44%; }
 .selection-part--esc { right: 13%; bottom: 20%; }
 
-.selection-config-panel { align-self: stretch; padding: 36px 30px; color: #0f172a; border: 1px solid rgba(255, 255, 255, .5); border-radius: 18px; background: #eef0f2; box-shadow: 0 24px 55px rgba(0, 0, 0, .2); }
-.selection-config-index { color: #94a3b8; font-size: 12px; font-weight: 800; letter-spacing: .12em; }
-.selection-config-panel h2 { margin: 12px 0 8px; font-size: 25px; }
-.selection-config-panel > p { margin: 0 0 28px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+.selection-config-panel { align-self: stretch; padding: 36px 30px; color: #07111d; border: 1px solid rgba(255, 255, 255, .5); border-radius: 18px; background: rgba(214, 217, 222, .68); box-shadow: 0 24px 55px rgba(0, 0, 0, .2); backdrop-filter: blur(14px); }
+.selection-config-index { color: #334155; font-size: 13px; font-weight: 800; letter-spacing: .12em; }
+.selection-config-panel h2 { margin: 12px 0 8px; color: #07111d; font-size: 28px; }
+.selection-config-panel > p { margin: 0 0 28px; color: #1e293b; font-size: 14px; line-height: 1.7; }
 .selection-field { display: block; margin-bottom: 18px; }
-.selection-field > span { display: block; margin-bottom: 7px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.selection-field > span { display: block; margin-bottom: 7px; color: #1e293b; font-size: 13px; font-weight: 800; }
 .selection-number-input { display: flex; align-items: center; gap: 8px; }
-.selection-number-input small { color: var(--text-secondary); }
+.selection-number-input small { color: #1e293b; font-size: 12px; font-weight: 700; }
 .selection-battery-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .selection-battery-fields .selection-field:first-child { grid-column: 1 / -1; }
 .selection-part-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 30px; }
-.selection-part-tabs button { padding: 8px 3px; border: 0; border-radius: 7px; color: #64748b; background: #eef0f2; font-size: 10px; cursor: pointer; }
+.selection-part-tabs button { padding: 8px 3px; border: 0; border-radius: 7px; color: #1e293b; background: rgba(214, 217, 222, .58); font-size: 11px; font-weight: 700; cursor: pointer; }
 .selection-part-tabs button.active { color: #0f172a; background: #fff; box-shadow: 0 7px 16px rgba(15, 23, 42, .13); transform: translateY(-3px); }
 
 .selection-calculate { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; width: min(1376px, 100%); margin: 0 auto; padding: 50px 20px 54px; }
